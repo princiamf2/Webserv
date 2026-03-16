@@ -6,7 +6,7 @@
 class HttpParser
 {
     public:
-        static HttpRequest parserRequest(std::string const&);
+        static HttpRequest parseRequest(std::string const&);
 };
 
 #endif /* HTTPPARSER_HPP */

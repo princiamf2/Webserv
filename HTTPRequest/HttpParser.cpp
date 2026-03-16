@@ -14,7 +14,7 @@ static std::string trim(const std::string& str)
     return str.substr(start, end - start);
 }
 
-HttpRequest HttpParser::parserRequest(std::string const& rawRequest)
+HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
 {
     HttpRequest request;
     size_t headerEnd = rawRequest.find("\r\n\r\n");

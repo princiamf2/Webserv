@@ -6,7 +6,7 @@ static bool isSupportedMethod(std::string const& method)
     return (method == "GET" || method == "POST" || method == "DELETE");
 }
 
-HttpResponse RequestHandler::handlerResquest(HttpRequest const& request)
+HttpResponse RequestHandler::handleRequest(HttpRequest const& request)
 {
     HttpResponse response;
 

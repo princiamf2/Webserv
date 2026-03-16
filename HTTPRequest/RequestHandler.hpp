@@ -7,7 +7,7 @@
 class RequestHandler
 {
     public:
-        static HttpResponse handlerResquest(HttpRequest const&);
+        static HttpResponse handleRequest(HttpRequest const&);
 };
 
 #endif /* REQUESTHANDLER_HPP */
