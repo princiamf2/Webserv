@@ -1,14 +1,3 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   ParseConfig.cpp                                    :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: marvin <marvin@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/03/17 20:28:49 by marvin            #+#    #+#             */
-/*   Updated: 2026/03/17 20:28:49 by marvin           ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
 
 #include "ParseConfig.hpp"
 #include <fstream> //permet de lire le fichier de config
@@ -25,30 +14,59 @@ std::vector<ServerConfig> parseConfig(std::string path)
 		std::cerr << "Error opening config file " << path << std::endl;
 		return std::vector<ServerConfig>();
 	}
+	
 	std::string content((std::istreambuf_iterator<char>(configFile)), std::istreambuf_iterator<char>()); // lit tout le contenu du configfile dans une string
 	//ifstreambuf_iterator parcourt un fichier char par char, premier pour le debut du fichier, second pour la fin du fichier
 	if (content.empty())
 	{
 	    std::cerr << "config file is empty" << std::endl;
-    return std::vector<ServerConfig>();
-}
+    	return std::vector<ServerConfig>();
+	}
+
 	// A FAIRE: analyser le contenu et remplir les ServerConfig
 	std::istringstream stream(content); //charge le content 
 	std::string line;
 	std::vector<ServerConfig> serverlist; //vector de ServerConfig a retourner
-	while (std::getline(stream, line)) //lire line by line
+	
+	while (std::getline(stream, line)) //boucle principale pour lire le configfile ligne par ligne
 	{
-		// A FAIRE: analyser chaque ligne et remplir les ServerConfig
 		if (line.find("server") != std::string::npos)
 		{
-		//A FAIRE : creer un nouveau ServerConfig et l'ajouter au vector de ServerConfig
-		ServerConfig server;	
-		serverlist.push_back(server);
+			ServerConfig server;	
+			std::string serverLine;
+			while (std::getline(stream, serverLine)) 
+			{
+				if (serverLine.find("}") != std::string::npos)
+					break;
+				//A FAIRE : analyser serveLine et remplir server
+				std::istringstream lineStream(serverLine);
+				std::string word_to_parse;
+				lineStream >> word_to_parse;
+			}
+			serverlist.push_back(server);
 		}
-		std::cout << "Line: " << line << std::endl; //pour debug
+		std::cout << "Line: " << line << std::endl; 
 	}
-
 	return serverlist;
 }
 
 
+
+//exemple a parser
+
+/*
+
+server 
+{
+	listen 8080;
+	root /var/www/html;
+	server_name webserv.com;
+}
+
+*/
+
+/*
+
+c++ -Wall -Wextra -Werror main.cpp ParseConfig.cpp -o webserv
+
+*/
