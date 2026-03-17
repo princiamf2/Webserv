@@ -42,6 +42,34 @@ std::vector<ServerConfig> parseConfig(std::string path)
 				std::istringstream lineStream(serverLine);
 				std::string word_to_parse;
 				lineStream >> word_to_parse;
+				if (word_to_parse == "listen")
+				{
+					std::string port_str;
+					lineStream >> port_str; // extaire le port par exemple "0808;"
+					// A FAIRE : enlever le ; a la fin
+					//convertir en unsigned int
+					//ajouter a server.listen_ports
+				}
+				else if (word_to_parse == "root")
+				{
+					std::string root_path;
+					lineStream >> root_path; //recup path de root
+					// A FAIRE : enlever le ; a la fin
+					//ajouter a server.root
+				}
+				else if (word_to_parse == "domain_name")
+				{
+					std::string domain_name;
+					lineStream >> domain_name; //recup domain_name
+					// A FAIRE : enlever le ; a la fin
+					//ajouter a server.domain_name
+				}
+				/*
+				else if (word_to_parse == "index") {}
+				else if (word_to_parse == "error_page") {}
+				else if (word_to_parse == "client_max_body_size") {}
+				else if (word_to_parse == "location") {}
+				*/
 			}
 			serverlist.push_back(server);
 		}
@@ -60,7 +88,7 @@ server
 {
 	listen 8080;
 	root /var/www/html;
-	server_name webserv.com;
+	domain_name webserv.com;
 }
 
 */
