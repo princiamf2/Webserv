@@ -46,23 +46,23 @@ std::vector<ServerConfig> parseConfig(std::string path)
 				{
 					std::string port_str;
 					lineStream >> port_str; // extaire le port par exemple "0808;"
-					// A FAIRE : enlever le ; a la fin
-					//convertir en unsigned int
-					//ajouter a server.listen_ports
+					port_str = port_str.substr(0, port_str.find(";"));
+					unsigned int port = std::stoul(port_str); // stoul convert str en UINT
+					server.listen_ports.insert(port); 
 				}
 				else if (word_to_parse == "root")
 				{
 					std::string root_path;
 					lineStream >> root_path; //recup path de root
-					// A FAIRE : enlever le ; a la fin
-					//ajouter a server.root
+					root_path = root_path.substr(0, root_path.find(";")); // enleve le ;
+					server.root = root_path; // assigne a server.root
 				}
 				else if (word_to_parse == "domain_name")
 				{
 					std::string domain_name;
 					lineStream >> domain_name; //recup domain_name
-					// A FAIRE : enlever le ; a la fin
-					//ajouter a server.domain_name
+					domain_name = domain_name.substr(0, domain_name.find(";"));
+					server.domain_names.insert(domain_name); //std::set donc insert pour ajouter a server.domain_names
 				}
 				/*
 				else if (word_to_parse == "index") {}
