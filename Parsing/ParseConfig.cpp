@@ -68,8 +68,32 @@ std::vector<ServerConfig> parseConfig(std::string path)
 				else if (word_to_parse == "index") {}
 				else if (word_to_parse == "error_page") {}
 				else if (word_to_parse == "client_max_body_size") {}
-				else if (word_to_parse == "location") {}
 				*/
+				else if (word_to_parse == "location") 
+				{
+					Location location;
+					std::string locationLine;
+					lineStream >> location.path;
+					while (std::getline(stream, locationLine)) //seconde boucle pour lire les lignes location
+					{
+						if (locationLine.find("}") != std::string::npos)
+							break;
+						std::istringstream locationStream(locationLine);
+						std::string location_word;
+						locationStream >> location_word;
+						/*
+						if (location_word == "root") {}
+						else if (location_word == "index") {}
+						else if (location_word == "methods") {}
+						else if (location_word == "show_directory") {}
+						else if (location_word == "upload_dir") {}
+						else if (location_word == "redirect_page") {}
+						else if (location_word == "cgi_extensions") {}
+						*/
+					}
+					
+				}
+				
 			}
 			serverlist.push_back(server);
 		}
@@ -84,11 +108,16 @@ std::vector<ServerConfig> parseConfig(std::string path)
 
 /*
 
-server 
+server
 {
-	listen 8080;
-	root /var/www/html;
-	domain_name webserv.com;
+    listen 8080;
+    root /var/www/html;
+    domain_name webserv.com;
+    location /images
+    {
+        root /var/www/images;
+        methods GET;
+    }
 }
 
 */
