@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 
+//la class response que lui contien aussi un constructeur
 class HttpResponse
 {
     public:

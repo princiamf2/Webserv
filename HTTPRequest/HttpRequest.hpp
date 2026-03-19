@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 
+//class request qui contien que des membres
 class HttpRequest
 {
     public:

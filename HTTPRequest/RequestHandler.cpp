@@ -1,15 +1,18 @@
 #include "RequestHandler.hpp"
 #include <sstream>
 
+//petit outil qui check les methods
 static bool isSupportedMethod(std::string const& method)
 {
     return (method == "GET" || method == "POST" || method == "DELETE");
 }
 
+//on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request)
 {
     HttpResponse response;
 
+	//si pas bonne version
     if (request.version != "HTTP/1.1")
     {
         response.statusCode = 505;
@@ -19,6 +22,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request)
         return response;
     }
 
+	//si s'est pas une method que nous supportons
     if (!isSupportedMethod(request.method))
 	{
 		response.statusCode = 501;
@@ -28,6 +32,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request)
 		return response;
 	}
 
+	//et la on va faire les reponse de chaque methode
 	if (request.method == "GET")
 	{
 		response.statusCode = 200;
