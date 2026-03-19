@@ -3,6 +3,8 @@
 
 #include "HttpRequest.hpp"
 
+// class avec juste une methode static pour l'instant pour parser les requete
+
 class HttpParser
 {
     public:
