@@ -1,0 +1,311 @@
+
+
+Plan de Développement Conceptuel Détaillé du Projet Webserv
+
+
+Phase 1 : Analyse de la Configuration
+
+Objectif : Traduire le fichier de configuration en une représentation interne structurée et validée.
+
+
+
+1.1. Définition des Structures de Données Internes
+
+	1.1.1. Créer une structure pour une "Règle de Route" (Location) :
+
+	Doit pouvoir stocker :
+
+		Un identifiant de chemin d'URL.
+
+		Un ensemble de méthodes HTTP autorisées (GET, POST, DELETE).
+
+		Une directive de racine de document spécifique à cette route.
+
+		Une directive de fichier par défaut.
+
+		Un indicateur booléen pour l'activation/désactivation de l'affichage de répertoire.
+
+		Un chemin pour le stockage des fichiers téléversés (upload).
+
+		Une directive de redirection (code et URL de destination).
+
+		Un ensemble d'extensions de fichiers à traiter comme des CGI.
+
+	1.1.2. Créer une structure pour une "Configuration de Serveur" :
+
+	Doit pouvoir stocker :
+
+		Un ensemble de ports d'écoute.
+
+		Un ensemble de noms de serveur.
+
+		Une directive de racine de document par défaut.
+
+		Un fichier d'index par défaut.
+
+		Une association entre les codes d'erreur HTTP et les chemins des pages d'erreur personnalisées.
+
+		Une limite pour la taille maximale du corps des requêtes clientes.
+
+		Une collection des "Règles de Route" définies pour ce serveur.
+
+1.2. Implémentation du Mécanisme de Parsing
+
+	1.2.1. Lecture du Fichier :
+
+		Ouvrir le fichier de configuration spécifié en argument ou un chemin par défaut. Gérer les erreurs d'ouverture (open).
+
+		Lire l'intégralité du contenu dans un buffer (read).
+
+	1.2.2. Logique d'Analyse Syntaxique :
+
+		Concevoir une logique pour décomposer le contenu brut en unités logiques (tokens ou lignes).
+
+		Identifier et isoler les blocs de configuration de serveur.
+
+	Pour chaque bloc de serveur :
+
+		Instancier une "Configuration de Serveur".
+
+		Analyser chaque ligne directive pour en extraire le mot-clé et sa valeur.
+
+		Identifier et isoler les blocs de "Règle de Route" à l'intérieur.
+
+		Pour chaque bloc de route, instancier une "Règle de Route" et l'associer à la configuration de serveur.
+
+	1.2.3. Validation Sémantique :
+
+	Pour chaque directive parsée, valider que sa valeur est conforme aux attentes :
+
+		Les ports doivent être des nombres valides.
+
+		Les méthodes HTTP doivent être parmi celles autorisées.
+
+		L'indicateur d'affichage de répertoire doit être on ou off.
+
+		La taille maximale du corps doit être un nombre positif.
+
+	1.2.4. Gestion des Erreurs de Parsing :
+
+		En cas de syntaxe invalide (accolade manquante, directive inconnue, valeur incorrecte), le programme doit s'arrêter et afficher un message d'erreur explicite.
+
+	1.2.5. Résultat Final :
+
+		Produire une collection (ex: std::vector) de "Configurations de Serveur" prêtes à être utilisées par le module réseau.
+
+
+
+Phase 2 : Mise en Place du Cœur Réseau Asynchrone
+
+Objectif : Établir une infrastructure capable de gérer de multiples connexions simultanées sans jamais se bloquer.
+
+
+
+2.1. Initialisation des Sockets d'Écoute
+
+	2.1.1. Création des Sockets :
+
+		Parcourir toutes les "Configurations de Serveur".
+
+		Pour chaque port unique identifié, exécuter la séquence suivante :
+
+		Créer un point de communication avec socket().
+
+		Configurer ce socket avec setsockopt() et l'option SO_REUSEADDR pour éviter les problèmes de "port déjà utilisé" au redémarrage.
+
+		Rendre le socket non-bloquant en utilisant fcntl() avec O_NONBLOCK.
+
+		Associer le socket à une adresse et un port avec bind().
+
+		Mettre le socket en état d'écoute pour les connexions entrantes avec listen().
+
+	2.1.2. Stockage des Sockets :
+
+		Conserver une structure de données qui associe chaque file descriptor de socket d'écoute à la ou les "Configurations de Serveur" correspondantes.
+
+2.2. Implémentation de la Boucle d'Événements
+
+	2.2.1. Surveillance des File Descriptors :
+
+		Initialiser une structure de données pour le multiplexage (ex: un std::vector<pollfd>).
+
+		Ajouter tous les file descriptors des sockets d'écoute à cette structure.
+
+	2.2.2. Boucle Principale :
+
+		Entrer dans une boucle infinie.
+
+		Au début de chaque tour de boucle, appeler une fonction de multiplexage (poll(), select(), etc.) pour attendre un événement sur l'un des file descriptors surveillés.
+
+	2.2.3. Traitement des Événements :
+
+		Après le retour de la fonction de multiplexage, parcourir la structure de données pour identifier les file descriptors qui ont eu une activité.
+
+	Si un socket d'écoute a une activité :
+
+		Accepter la nouvelle connexion avec accept().
+
+		Rendre le file descriptor du nouveau client non-bloquant avec fcntl().
+
+		Créer une représentation interne pour ce client (un objet ou une structure).
+
+		Ajouter le file descriptor du client à la structure de données de multiplexage pour le surveiller à son tour.
+
+	Si un socket client a une activité :
+
+		Déterminer si l'événement est une demande de lecture (données disponibles) ou une possibilité d'écriture (buffer de sortie du système prêt).
+
+		Déléguer le traitement à une fonction de gestion de client (décrite en 2.3).
+
+	Si une erreur est détectée sur un socket :
+
+		Fermer la connexion et nettoyer les ressources associées.
+
+2.3. Gestion d'une Connexion Client
+
+	2.3.1. Représentation d'un Client :
+
+		Créer une structure ou une classe pour chaque client connecté.
+
+	Elle doit contenir au minimum :
+
+		Le file descriptor du socket.
+
+		Un buffer pour accumuler les données lues (buffer de lecture).
+
+		Un buffer pour stocker les données à envoyer (buffer d'écriture).
+
+		Une référence à la configuration du serveur qui l'a accepté.
+
+	2.3.2. Fonction de Gestion de Lecture :
+
+		Utiliser recv() pour lire les données du socket et les ajouter au buffer de lecture.
+
+		Gérer les cas de déconnexion (recv retourne 0) ou d'erreur (recv retourne -1).
+
+		Analyser le buffer de lecture pour déterminer si une requête HTTP complète a été reçue.
+
+		Si une requête est complète, la passer au "Module de Logique HTTP" (Phase 3). La réponse produite sera placée dans le buffer d'écriture.
+
+	2.3.3. Fonction de Gestion d'Écriture :
+
+		Si le buffer d'écriture n'est pas vide, utiliser send() pour envoyer une partie de son contenu.
+
+		Mettre à jour le buffer d'écriture en retirant les données envoyées.
+
+		Gérer les cas d'erreur (send retourne -1).
+
+
+
+Phase 3 : Implémentation de la Logique HTTP
+
+Objectif : Traiter une requête HTTP complète et produire une réponse HTTP complète, sans effectuer d'opérations réseau directes.
+
+
+
+	3.1. Mécanisme d'Analyse de Requête
+
+		Créer une fonction qui prend un buffer de données brutes et le transforme en une structure de "Requête" interne.
+
+		Cette structure doit contenir : la méthode, l'URI, la version HTTP, une collection d'en-têtes, et le corps de la requête.
+
+	3.2. Mécanisme de Traitement Central
+
+		Créer une fonction qui prend la structure "Requête" et la "Configuration de Serveur" appropriée.
+
+	3.2.1. Identification de la Route :
+
+		Déterminer la "Règle de Route" la plus pertinente à appliquer en se basant sur l'URI de la requête.
+
+	3.2.2. Validations :
+
+		Vérifier que la méthode de la requête est autorisée par la règle de route.
+
+		Vérifier que la taille du corps de la requête ne dépasse pas la limite configurée.
+
+	3.2.3. Exécution de l'Action :
+
+		Appeler une fonction spécifique en fonction de la méthode HTTP :
+
+	Pour GET :
+
+		Construire le chemin système vers la ressource demandée.
+
+		Si la ressource est un répertoire, gérer l'affichage de répertoire ou le fichier par défaut.
+
+	Si la ressource est un fichier, vérifier s'il s'agit d'un CGI. Si non, lire son contenu (read). Si oui, passer à la Phase 4.
+
+	Pour POST :
+
+		Construire le chemin complet de sauvegarde dans le répertoire d'upload.
+
+		Écrire (write) le corps de la requête dans un nouveau fichier.
+
+	Pour DELETE :
+
+		Utiliser unlink() ou remove() pour supprimer le fichier spécifié.
+
+	3.3. Mécanisme de Construction de Réponse
+
+		Créer une fonction qui prend le résultat du traitement (ex: code de statut, contenu d'un fichier) et génère une réponse HTTP complète sous forme de buffer.
+
+	3.3.1. Formatage de la Réponse :
+
+		Construire la ligne de statut (ex: HTTP/1.1 200 OK).
+
+		Ajouter les en-têtes HTTP nécessaires (Content-Type, Content-Length, Date, etc.).
+
+		Concaténer le tout avec le corps de la réponse, en respectant les séparateurs \r\n.
+
+
+
+
+Phase 4 : Gestion des CGI (Common Gateway Interface)
+
+Objectif : Exécuter un script externe pour générer une réponse dynamique.
+
+
+4.1. Détection d'une Requête CGI
+
+	Pendant la Phase 3.2.3, si un fichier demandé a une extension configurée comme CGI, le traitement est délégué à ce module.
+
+4.2. Préparation à l'Exécution
+
+	4.2.1. Création de l'Environnement :
+
+		Constituer une liste de variables d'environnement conformes au standard CGI (ex: REQUEST_METHOD, QUERY_STRING, SCRIPT_FILENAME).
+
+	4.2.2. Mise en Place de la Communication :
+
+	Créer deux canaux de communication avec pipe() : un pour envoyer le corps de la requête au CGI (son stdin), et un pour recevoir sa réponse (son stdout).
+
+4.3. Exécution du Processus Enfant
+
+	Utiliser fork() pour créer un nouveau processus.
+
+	Dans le processus enfant :
+
+		Rediriger son stdin et son stdout vers les pipes créés en utilisant dup2().
+
+		Utiliser chdir() pour se placer dans le bon répertoire de travail, si nécessaire.
+
+		Exécuter le script en utilisant execve().
+
+		Dans le processus parent (le serveur) :
+
+		Rendre les file descriptors des pipes non-bloquants (fcntl).
+
+		Ajouter ces file descriptors à la structure de données de multiplexage de la Phase 2.2.1 pour les surveiller.
+
+4.4. Gestion Asynchrone de la Communication CGI
+
+	La boucle d'événements de la Phase 2 traitera les pipes CGI comme n'importe quel autre file descriptor.
+
+	Quand le pipe d'entrée du CGI est prêt en écriture, le serveur y enverra le corps de la requête (write).
+
+	Quand le pipe de sortie du CGI est prêt en lecture, le serveur lira la réponse du script (read) et l'ajoutera au buffer d'écriture du client.
+
+	Le serveur doit surveiller la fin du processus enfant avec waitpid() (en mode WNOHANG) pour nettoyer les ressources.
+
+
+Je veux bien faire la phase 1 et la phase 3 perso . 
