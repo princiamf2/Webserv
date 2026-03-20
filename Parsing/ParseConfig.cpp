@@ -99,6 +99,7 @@ std::vector<ServerConfig> parseConfig(std::string path)
 						else if (location_word == "cgi_extensions") {}
 						*/
 					}
+					server.locations.push_back(location);
 					
 				}
 				
