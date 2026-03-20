@@ -1,0 +1,474 @@
+\n===== ./HTTPRequest/HttpParser.cpp =====\n
+#include "HttpParser.hpp"
+#include <sstream>
+#include <stdexcept>
+
+// petit outil pour retirer espace au debut et a la fin 
+static std::string trim(const std::string& str)
+{
+    size_t start = 0;
+    size_t end = str.size();
+
+    while (start < str.size() && (str[start] == ' ' || str[start] == '\t' || str[start] == '\r'))
+        start++;
+    while (end > start && (str[end - 1] == ' ' || str[end - 1] == '\t' || str[end - 1] == '\r'))
+        end--;
+    return str.substr(start, end - start);
+}
+
+HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
+{
+    HttpRequest request;//une requete 
+    size_t headerEnd = rawRequest.find("\r\n\r\n");//je prends la position du separateur entre header et body
+
+    if (headerEnd == std::string::npos)//si il existe pas je renvoi une exception une requete dois toujours avoir ce separateur
+        throw std::runtime_error("Invalid HTTP request: missing header/body separator");
+
+    std::string headerPart = rawRequest.substr(0, headerEnd);//je stock la partie header de la requete du debut de la requte jusqu'au separateur
+    request.body = rawRequest.substr(headerEnd + 4);//et je stock le body dans request.body car la s'est le header qui m'interresse
+
+    std::istringstream stream(headerPart);//ici je transforme la partie header en flux ce qui veux dire que ça va lire la ligne un peux comme un file en prenant chaque mot separe par des espace meme multiple
+    std::string line;//la variable que je vais utiliser dans getline
+
+    if (!std::getline(stream, line))//je lie la premiere ligne si il y a rien a lire je renvoi une erreur
+        throw std::runtime_error("Invalid HTTP request: empty request");
+    if (!line.empty() && line[line.size() - 1] == '\r')//je regarde si la ligne que j'ai lu a '\r' a la fin ou il est pas vide
+        line.erase(line.size() - 1);//si il a '\r' je l'enleve
+
+    std::istringstream requestLine(line);//je transforme la ligne en flux 
+    if (!(requestLine >> request.method >> request.uri >> request.version))//je mets chaque partie de la line ou il faut car une requete doit toujours commecer par la method le uri et la version
+        throw std::runtime_error("Invalid HTTP request line");             //pour le moment je verifie pas si les methode sont corect etc...
+
+    //ici je lis le reste de hearder et je cherche : qui est le separateur key value
+    while (std::getline(stream, line))
+    {
+        if (!line.empty() && line[line.size() - 1] == '\r')
+            line.erase(line.size() - 1);
+        size_t colonPos = line.find(':');
+        if (colonPos == std::string::npos)
+            throw std::runtime_error("Invalid header line");
+        std::string key = trim(line.substr(0, colonPos));
+        std::string value = trim(line.substr(colonPos + 1));
+        request.headers[key] = value;
+    }
+    return request;
+}\n===== ./HTTPRequest/HttpParser.hpp =====\n
+#ifndef HTTPPARSER_HPP
+#define HTTPPARSER_HPP
+
+#include "HttpRequest.hpp"
+
+// class avec juste une methode static pour l'instant pour parser les requete
+
+class HttpParser
+{
+    public:
+        static HttpRequest parseRequest(std::string const&);
+};
+
+#endif /* HTTPPARSER_HPP */
+\n===== ./HTTPRequest/HttpRequest.hpp =====\n
+#ifndef HTTPREQUEST_HPP
+#define HTTPREQUEST_HPP
+
+#include <string>
+#include <map>
+
+//class request qui contien que des membres
+class HttpRequest
+{
+    public:
+        std::string method;
+        std::string uri;
+        std::string version;
+        std::map<std::string, std::string> headers;
+        std::string body;
+};
+
+#endif /* HTTPREQUEST_HPP */
+\n===== ./HTTPRequest/HttpResponse.cpp =====\n
+#include "HttpResponse.hpp"
+
+//constructeur de la class reponse
+HttpResponse::HttpResponse() : statusCode(200), reasonPhrase("OK") {}\n===== ./HTTPRequest/HttpResponse.hpp =====\n
+#ifndef HTTPRESPONSE_HPP
+#define HTTPRESPONSE_HPP
+
+#include <string>
+#include <map>
+
+//la class response que lui contien aussi un constructeur
+class HttpResponse
+{
+    public:
+        int statusCode;
+        std::string reasonPhrase;
+        std::map<std::string, std::string> headers;
+        std::string body;
+
+        HttpResponse();
+};
+
+#endif /* HTTPRESPONSE_HPP */
+\n===== ./HTTPRequest/HttpResponseBuilder.cpp =====\n
+#include "HttpResponseBuilder.hpp"
+#include "HttpResponse.hpp"
+#include <sstream>
+
+std::string HttpResponseBuilder::buildResponse(HttpResponse const& response)
+{
+    std::ostringstream out;
+
+    out << "HTTP/1.1 " << response.statusCode << " " << response.reasonPhrase << "\r\n";
+
+    for (std::map<std::string, std::string>::const_iterator it = response.headers.begin();
+        it != response.headers.end(); ++it)
+        out << it->first << ": " << it->second << "\r\n";
+    out << "Content-Length: " << response.body.size() << "\r\n";
+    out << "\r\n";
+    out << response.body;
+    return out.str();
+}\n===== ./HTTPRequest/HttpResponseBuilder.hpp =====\n
+#ifndef HTTPRESPONSEBUILDER_HPP
+#define HTTPRESPONSEBUILDER_HPP
+
+#include "HttpResponse.hpp"
+
+class HttpResponseBuilder
+{
+    public:
+        static std::string buildResponse(HttpResponse const&);
+};
+
+#endif /* HTTPRESPONSEBUILDER_HPP */
+\n===== ./HTTPRequest/RequestHandler.cpp =====\n
+#include "RequestHandler.hpp"
+#include <sstream>
+
+//petit outil qui check les methods
+static bool isSupportedMethod(std::string const& method)
+{
+    return (method == "GET" || method == "POST" || method == "DELETE");
+}
+
+const Location* findLocation(ServerConfig const& server, std::string const& uri)
+{
+	for (size_t i = 0; i < server.locations.size(); i++)
+	{
+		if (uri.find(server.locations[i].path) == 0)
+			return &server.locations[i];
+	}
+	return NULL;
+}
+//on fait une validation et on met les code d'erreur et les message d'erreur
+HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
+{
+    HttpResponse response;
+
+	//si pas bonne version
+    if (request.version != "HTTP/1.1")
+    {
+        response.statusCode = 505;
+        response.reasonPhrase = "HTTP version Not Supported";
+        response.headers["Content-Type"] = "text/plain";
+        response.body = "505 HTTP Version Not Supported\n";
+        return response;
+    }
+
+	//si s'est pas une method que nous supportons
+    if (!isSupportedMethod(request.method))
+	{
+		response.statusCode = 501;
+		response.reasonPhrase = "Not Implemented";
+		response.headers["Content-Type"] = "text/plain";
+		response.body = "501 Not Implemented\n";
+		return response;
+	}
+
+	//et la on va faire les reponse de chaque methode
+	if (request.method == "GET")
+	{
+		response.statusCode = 200;
+		response.reasonPhrase = "OK";
+		response.headers["Content-Type"] = "text/plain";
+		response.body = "GET received for " + request.uri + "\n";
+		return response;
+	}
+
+	if (request.method == "POST")
+	{
+		std::ostringstream oss;
+        oss << request.body.size();
+
+        response.statusCode = 200;
+        response.reasonPhrase = "OK";
+        response.headers["Content-Type"] = "text/plain";
+        response.body = "POST received with body size = " + oss.str() + "\n";
+        return response;
+	}
+
+	response.statusCode = 200;
+	response.reasonPhrase = "OK";
+	response.headers["Content-Type"] = "text/plain";
+	response.body = "DELETE received for " + request.uri + "\n";
+	return response;
+}
+\n===== ./HTTPRequest/RequestHandler.hpp =====\n
+#ifndef REQUESTHANDLER_HPP
+#define REQUESTHANDLER_HPP
+
+#include "HttpRequest.hpp"
+#include "HttpResponse.hpp"
+#include "Parsing/ServerConfig.hpp"
+
+class RequestHandler
+{
+    public:
+        static HttpResponse handleRequest(HttpRequest const&, ServerConfig const&, Location const*);
+};
+
+#endif /* REQUESTHANDLER_HPP */
+\n===== ./HTTPRequest/main_test.cpp =====\n
+#include "HttpParser.hpp"
+#include "RequestHandler.hpp"
+#include "HttpResponseBuilder.hpp"
+#include <iostream>
+
+int main()
+{
+	std::string rawRequest =
+		"GET /index.html HTTP/1.1\r\n"
+		"Host: localhost:8080\r\n"
+		"\r\n";
+
+	try
+	{
+		HttpRequest request = HttpParser::parseRequest(rawRequest);
+		HttpResponse response = RequestHandler::handleRequest(request);
+		std::string rawResponse = HttpResponseBuilder::buildResponse(response);
+
+		std::cout << "===== RESPONSE =====" << std::endl;
+		std::cout << rawResponse << std::endl;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << "Error: " << e.what() << std::endl;
+	}
+	return 0;
+}\n===== ./Parsing/Location.hpp =====\n
+
+#ifndef LOCATION_HPP
+#define LOCATION_HPP
+
+#include <string>
+#include <set>
+#include <utility> // pour std::pair
+
+struct Location
+{
+	std::string path;
+	std::set<std::string> allowed_methods_http; //pour GET, POST, DELETE
+	std::string root; //chemin dossier racine
+	std::string index; //fichier index par defaut
+	bool show_directory = false; //affiche la liste des fichiers , si pas index 
+	std::string upload_dir; //dossier pour les fichiers uploades
+	std::pair <int, std::string> redirect_page; //code redirection + url redirection
+	std::set <std::string> cgi_extensions; //lquel CGI est active .py ou .php par exemple
+};
+
+#endif \n===== ./Parsing/ParseConfig.cpp =====\n
+
+#include "ParseConfig.hpp"
+#include <fstream> //permet de lire le fichier de config
+#include <iostream>
+#include <sstream> //permet de lire le contenu du configfile ligne par ligne
+
+
+//funct qui parse configfile et retourne un vector de ServerConfig
+std::vector<ServerConfig> parseConfig(std::string path)
+{
+	std::ifstream configFile(path);
+	if(!configFile.is_open())
+	{
+		std::cerr << "Error opening config file " << path << std::endl;
+		return std::vector<ServerConfig>();
+	}
+	
+	std::string content((std::istreambuf_iterator<char>(configFile)), std::istreambuf_iterator<char>()); // lit tout le contenu du configfile dans une string
+	//ifstreambuf_iterator parcourt un fichier char par char, premier pour le debut du fichier, second pour la fin du fichier
+	if (content.empty())
+	{
+	    std::cerr << "config file is empty" << std::endl;
+    	return std::vector<ServerConfig>();
+	}
+
+	// A FAIRE: analyser le contenu et remplir les ServerConfig
+	std::istringstream stream(content); //charge le content 
+	std::string line;
+	std::vector<ServerConfig> serverlist; //vector de ServerConfig a retourner
+	
+	while (std::getline(stream, line)) //boucle principale pour lire le configfile ligne par ligne
+	{
+		if (line.find("server") != std::string::npos)
+		{
+			ServerConfig server;	
+			std::string serverLine;
+			while (std::getline(stream, serverLine)) 
+			{
+				if (serverLine.find("}") != std::string::npos)
+					break;
+				//A FAIRE : analyser serveLine et remplir server
+				std::istringstream lineStream(serverLine);
+				std::string word_to_parse;
+				lineStream >> word_to_parse;
+				if (word_to_parse == "listen")
+				{
+					std::string port_str;
+					lineStream >> port_str; // extaire le port par exemple "0808;"
+					port_str = port_str.substr(0, port_str.find(";"));
+					unsigned int port = std::stoul(port_str); // stoul convert str en UINT
+					server.listen_ports.insert(port); 
+				}
+				else if (word_to_parse == "root")
+				{
+					std::string root_path;
+					lineStream >> root_path; //recup path de root
+					root_path = root_path.substr(0, root_path.find(";")); // enleve le ;
+					server.root = root_path; // assigne a server.root
+				}
+				else if (word_to_parse == "domain_name")
+				{
+					std::string domain_name;
+					lineStream >> domain_name; //recup domain_name
+					domain_name = domain_name.substr(0, domain_name.find(";"));
+					server.domain_names.insert(domain_name); //std::set donc insert pour ajouter a server.domain_names
+				}
+				/*
+				else if (word_to_parse == "index") {}
+				else if (word_to_parse == "error_page") {}
+				else if (word_to_parse == "client_max_body_size") {}
+				*/
+				else if (word_to_parse == "location") 
+				{
+					Location location;
+					std::string locationLine;
+					lineStream >> location.path;
+					while (std::getline(stream, locationLine)) //seconde boucle pour lire les lignes location
+					{
+						if (locationLine.find("}") != std::string::npos)
+							break;
+						std::istringstream locationStream(locationLine);
+						std::string location_word;
+						locationStream >> location_word;
+						/*
+						if (location_word == "root") {}
+						else if (location_word == "index") {}
+						else if (location_word == "methods") {}
+						else if (location_word == "show_directory") {}
+						else if (location_word == "upload_dir") {}
+						else if (location_word == "redirect_page") {}
+						else if (location_word == "cgi_extensions") {}
+						*/
+					}
+					
+				}
+				
+			}
+			serverlist.push_back(server);
+		}
+		std::cout << "Line: " << line << std::endl; 
+	}
+	return serverlist;
+}
+
+
+
+//exemple a parser
+
+/*
+
+server
+{
+    listen 8080;
+    root /var/www/html;
+    domain_name webserv.com;
+    location /images
+    {
+        root /var/www/images;
+        methods GET;
+    }
+}
+
+*/
+
+/*
+
+c++ -Wall -Wextra -Werror main.cpp ParseConfig.cpp -o webserv
+
+*/\n===== ./Parsing/ParseConfig.hpp =====\n
+
+#ifndef PARSECONFIG_HPP
+#define PARSECONFIG_HPP
+
+#include <fstream>
+#include <vector>
+#include "ServerConfig.hpp"
+
+std::vector<ServerConfig> parseConfig(std::string path);
+
+#endif\n===== ./Parsing/ServerConfig.hpp =====\n
+
+#ifndef SERVERCONFIG_HPP
+#define SERVERCONFIG_HPP
+
+#include <string>
+#include <set>
+#include <map>
+#include <vector>
+#include "Location.hpp"
+
+struct ServerConfig
+{
+	std::set<unsigned int> listen_ports; //ports d'ecoute
+	std::set<std::string> domain_names; //noms de domaine
+	std::string root; //chemin dossier racine
+	std::string index; //fichier index par defaut
+	std::map<int, std::string> error_pages; //code d'erreur + chemin (page 404 par exemple)
+	unsigned int client_max_body_size; //taille max du corps de la requete
+	std::vector <Location> locations; //liste des locations pour ce serveur
+};
+
+#endif \n===== ./Parsing/main.cpp =====\n
+
+#include <iostream>
+#include "ParseConfig.hpp"
+
+
+int main(int argc, char **argv)
+{
+    if (argc != 2)
+    {
+        std::cerr << " ./webserv configfile_path" << std::endl;
+        return 1;
+    }
+    std::vector<ServerConfig> servers = parseConfig(argv[1]);
+
+    std::cout << "nb de servers: " << servers.size() << std::endl;
+    for (size_t i = 0; i < servers.size(); ++i)
+    {
+        std::cout << "Server " << i << std::endl;
+        std::cout << "root " << servers[i].root << std::endl;
+        std::cout << "domain_names ";
+        for (std::set<std::string>::iterator iter = servers[i].domain_names.begin();
+            iter != servers[i].domain_names.end(); ++iter)
+                std::cout << *iter << " ";
+        std::cout << std::endl;
+    }
+
+    std::cout << "ports ";
+    for (unsigned int port : servers[0].listen_ports)
+        std::cout << port << " ";
+    std::cout << std::endl;
+    
+    return 0;
+}
