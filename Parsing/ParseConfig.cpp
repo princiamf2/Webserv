@@ -47,7 +47,15 @@ std::vector<ServerConfig> parseConfig(std::string path)
 					std::string port_str;
 					lineStream >> port_str; // extaire le port par exemple "0808;"
 					port_str = port_str.substr(0, port_str.find(";"));
-					unsigned int port = std::stoul(port_str); // stoul convert str en UINT
+					std::istringstream iss(port_str);
+					unsigned int port;
+					iss >> port;
+					if (iss.fail())
+					{
+						std::cerr << "invalid port: " << port_str << std::endl;
+						return std::vector<ServerConfig>();
+					}
+					//unsigned int port = std::stoul(port_str); // stoul convert str en UINT
 					server.listen_ports.insert(port); 
 				}
 				else if (word_to_parse == "root")
