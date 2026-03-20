@@ -7,8 +7,17 @@ static bool isSupportedMethod(std::string const& method)
     return (method == "GET" || method == "POST" || method == "DELETE");
 }
 
+const Location* findLocation(ServerConfig const& server, std::string const& uri)
+{
+	for (size_t i = 0; i < server.locations.size(); i++)
+	{
+		if (uri.find(server.locations[i].path) == 0)
+			return &server.locations[i];
+	}
+	return NULL;
+}
 //on fait une validation et on met les code d'erreur et les message d'erreur
-HttpResponse RequestHandler::handleRequest(HttpRequest const& request)
+HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
 {
     HttpResponse response;
 
