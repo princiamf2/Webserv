@@ -25,8 +25,9 @@ int main(int argc, char **argv)
     }
 
     std::cout << "ports ";
-    for (unsigned int port : servers[0].listen_ports)
-        std::cout << port << " ";
+    for (std::set<unsigned int>::iterator iter = servers[0].listen_ports.begin();
+    iter != servers[0].listen_ports.end(); ++iter)
+    std::cout << *iter << " ";
     std::cout << std::endl;
     
     return 0;
