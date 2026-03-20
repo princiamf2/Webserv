@@ -13,22 +13,34 @@ P = ./Parsing/
 SRCSPARSING = $(P)ParseConfig.cpp
 OBJSPARSING = $(SRCSPARSING:.cpp=.o)
 
+
+H = ./HTTPRequest/
+SRCSHTTP = $(H)HttpParser.cpp \
+			$(H)HttpResponse.cpp\
+			$(H)HttpResponseBuilder.cpp\
+			$(H)RequestHandler.cpp\
+
+OBJSHTTP = $(SRCSHTTP:.cpp=.o)
+
+SRCS = $(SRCSHTTP) $(SRCSPARSING) $(SRCSCORE)
+OBJS = $(OBJSHTTP) $(OBJSPARSING) $(OBJSCORE)
+
 RM = rm -f
 
 all: $(NAME)
 
-$(NAME): $(OBJSPARSING) $(OBJSCORE)
-	$(CXX) $(OBJSPARSING) $(OBJSCORE) $(CXXFLAGS) -o $(NAME)
+$(NAME): $(OBJS)
+	$(CXX) $(OBJS) $(CXXFLAGS) -o $(NAME)
 	@echo $(NAME)" compiled!\n"
 
 %.o: %.cpp
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	$(RM) $(OBJSCORE) $(OBJSPARSING)
+	$(RM) $(OBJS)
 
 fclean:
-	$(RM) $(OBJSCORE) $(OBJSPARSING) $(NAME)
+	$(RM) $(OBJS) $(NAME)
 
 re:
 	@make fclean
