@@ -9,6 +9,8 @@
 #include <arpa/inet.h>
 
 #include "colors.hpp"
+#include "../Parsing/Location.hpp"
+#include "../Parsing/ParseConfig.hpp"
 
 
 //====================(DEFINES)=============================//
@@ -23,7 +25,7 @@
 
 //============(PRINCIPAL)================//
 //main loop
-int loop();
+int loop(std::vector<ServerConfig> servers);
 
 //============(UTILS)====================//
 

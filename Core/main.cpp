@@ -7,8 +7,8 @@ int main(int ac, char**av)
 		std::cerr << ERROR << "Usage: " << av[0] << " <path-to-config-file>" << std::endl;
 		return (1);
 	}
-	//parsing here
+	std::vector<ServerConfig> servers = parseConfig(av[1]);
 	int err = FAIL;
-	if ((err = loop()) != SUCCESS) // with struct as arg
+	if ((err = loop(servers)) != SUCCESS) // with struct as arg
 		return (err);
 }	

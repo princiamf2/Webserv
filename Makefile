@@ -1,29 +1,34 @@
 NAME = webserv
 
 CXX = c++
-CXXFLAGS = -Wall -Wextra -Werror -std=c++98
+CXXFLAGS = -Wall -Wextra -Werror #-std=c++98
 
-SRCS = $(NAME).cpp\
-	main.cpp
+C = ./Core/
+SRCSCORE = $C$(NAME).cpp\
+			$Cmain.cpp
+OBJSCORE = $(SRCSCORE:.cpp=.o)
 
-OBJS = $(SRCS:.cpp=.o)
+
+P = ./Parsing/
+SRCSPARSING = $(P)ParseConfig.cpp
+OBJSPARSING = $(SRCSPARSING:.cpp=.o)
 
 RM = rm -f
 
 all: $(NAME)
 
-$(NAME): $(OBJS)
-	$(CXX) $(OBJS) $(CXXFLAGS) -o $(NAME)
+$(NAME): $(OBJSPARSING) $(OBJSCORE)
+	$(CXX) $(OBJSPARSING) $(OBJSCORE) $(CXXFLAGS) -o $(NAME)
 	@echo $(NAME)" compiled!\n"
 
 %.o: %.cpp
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	$(RM) $(OBJS)
+	$(RM) $(OBJSCORE) $(OBJSPARSING)
 
 fclean:
-	$(RM) $(OBJS) $(NAME)
+	$(RM) $(OBJSCORE) $(OBJSPARSING) $(NAME)
 
 re:
 	@make fclean
