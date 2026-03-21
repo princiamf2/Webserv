@@ -47,15 +47,14 @@ std::vector<ServerConfig> parseConfig(std::string path)
 					std::string port_str;
 					lineStream >> port_str; // extaire le port par exemple "0808;"
 					port_str = port_str.substr(0, port_str.find(";"));
-					std::istringstream iss(port_str);
+					std::istringstream in_string_stream(port_str);
 					unsigned int port;
-					iss >> port;
-					if (iss.fail())
+					in_string_stream >> port;
+					if (in_string_stream.fail())
 					{
 						std::cerr << "invalid port: " << port_str << std::endl;
 						return std::vector<ServerConfig>();
 					}
-					//unsigned int port = std::stoul(port_str); // stoul convert str en UINT
 					server.listen_ports.insert(port); 
 				}
 				else if (word_to_parse == "root")
@@ -72,11 +71,47 @@ std::vector<ServerConfig> parseConfig(std::string path)
 					domain_name = domain_name.substr(0, domain_name.find(";"));
 					server.domain_names.insert(domain_name); //std::set donc insert pour ajouter a server.domain_names
 				}
-				/*
-				else if (word_to_parse == "index") {}
-				else if (word_to_parse == "error_page") {}
-				else if (word_to_parse == "client_max_body_size") {}
-				*/
+				
+				else if (word_to_parse == "index")
+				{
+					std::string index_file;
+					lineStream >> index_file;
+					index_file = index_file.substr(0, index_file.find(";"));
+					server.index = index_file; 
+				}
+
+				else if (word_to_parse == "error_page")
+				{
+					std::string code_error_str, path_error;
+					lineStream >> code_error_str >> path_error; //extrait le code d'erreur et le chemin de la page d'erreur
+					code_error_str = code_error_str.substr(0, code_error_str.find(";"));
+					path_error = path_error.substr(0, path_error.find(";"));
+					std::istringstream in_string_stream(code_error_str);
+					int code_error;
+					in_string_stream >> code_error;
+					if (in_string_stream.fail())
+					{
+						std::cerr << "invalid error code: " << code_error_str << std::endl;
+						return std::vector<ServerConfig>();
+					}
+					server.error_pages[code_error] = path_error; //ajoute le code d'erreur et le chemin de la page d'erreur a server.error_pages
+				}
+				else if (word_to_parse == "client_max_body_size")
+				{
+					std::string size_str;
+					lineStream >> size_str; 
+					size_str = size_str.substr(0, size_str.find(";"));
+					std::istringstream in_string_stream(size_str);
+					unsigned int size;
+					in_string_stream >> size;
+					if (in_string_stream.fail())
+					{
+						std::cerr << "invalid client_max_body_size: " << size_str << std::endl;
+						return std::vector<ServerConfig>();
+					}
+					server.client_max_body_size = size;
+				}
+				
 				else if (word_to_parse == "location") 
 				{
 					Location location;
@@ -89,6 +124,7 @@ std::vector<ServerConfig> parseConfig(std::string path)
 						std::istringstream locationStream(locationLine);
 						std::string location_word;
 						locationStream >> location_word;
+
 						if (location_word == "root")
 						{
 							std::string root_path;
@@ -104,19 +140,35 @@ std::vector<ServerConfig> parseConfig(std::string path)
 							index_file = index_file.substr(0, index_file.find(";"));
 							location.index = index_file; 
 						}
+
 						else if (location_word == "methods")
 						{
-    					std::string method;
-    					while (locationStream >> method)
+    						std::string method;
+    						while (locationStream >> method)
     						{
-    			    		method = method.substr(0, method.find(";"));
-    			    		location.allowed_methods_http.insert(method); // insert directement dans location
-    			    		if (method[method.size() - 1] == ';') // C++98 compatible
-    			        		break;
+    			    			method = method.substr(0, method.find(";"));
+    			    			location.allowed_methods_http.insert(method); // insert directement dans location
+    			    			if (method[method.size() - 1] == ';') // C++98 compatible
+    			        			break;
     						}
-						}	
-						/*else if (location_word == "show_directory") {}
-						else if (location_word == "upload_dir") {}
+						}
+
+						else if (location_word == "show_directory")
+						{
+							std::string show_directory_str;
+							locationStream >> show_directory_str;
+							show_directory_str = show_directory_str.substr(0, show_directory_str.find(";"));
+							if (show_directory_str == "true")
+								location.show_directory = true;
+							else if (show_directory_str == "false")
+								location.show_directory = false;
+							else
+							{
+								std::cerr << "invalid value for show_directory: " << show_directory_str << std::endl;
+								return std::vector<ServerConfig>();
+							}
+						}
+						/*else if (location_word == "upload_dir") {}
 						else if (location_word == "redirect_page") {}
 						else if (location_word == "cgi_extensions") {}
 						*/
