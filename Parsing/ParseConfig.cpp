@@ -38,7 +38,6 @@ std::vector<ServerConfig> parseConfig(std::string path)
 			{
 				if (serverLine.find("}") != std::string::npos)
 					break;
-				//A FAIRE : analyser serveLine et remplir server
 				std::istringstream lineStream(serverLine);
 				std::string word_to_parse;
 				lineStream >> word_to_parse;
@@ -168,10 +167,44 @@ std::vector<ServerConfig> parseConfig(std::string path)
 								return std::vector<ServerConfig>();
 							}
 						}
-						/*else if (location_word == "upload_dir") {}
-						else if (location_word == "redirect_page") {}
-						else if (location_word == "cgi_extensions") {}
-						*/
+
+						else if (location_word == "upload_dir")
+						{
+							std::string upload_dir;
+							locationStream >> upload_dir;
+							upload_dir = upload_dir.substr(0, upload_dir.find(";"));
+							location.upload_dir = upload_dir;
+						}
+
+						else if (location_word == "redirect_page") 
+						{
+							std::string code_str, url_str;
+							locationStream >> code_str >> url_str;
+							code_str = code_str.substr(0, code_str.find(";"));
+							url_str = url_str.substr(0, url_str.find(";"));
+							std::istringstream in_string_stream(code_str);
+							int code;
+							in_string_stream >> code;
+							if (in_string_stream.fail())
+							{
+								std::cerr << "invalid redirect code: " << code_str << std::endl;
+								return std::vector<ServerConfig>();
+							}
+							location.redirect_page = std::make_pair(code, url_str);
+						}
+
+						else if (location_word == "cgi_extensions")
+						{
+							std::string cgi_extension;
+							while (locationStream >> cgi_extension)
+							{
+								cgi_extension = cgi_extension.substr(0, cgi_extension.find(";"));
+								location.cgi_extensions.insert(cgi_extension);
+								if (cgi_extension[cgi_extension.size() - 1] == ';') // C++98 compatible
+									break;
+							}
+						}
+						
 					}
 					server.locations.push_back(location);
 				}
@@ -179,30 +212,12 @@ std::vector<ServerConfig> parseConfig(std::string path)
 			}
 			serverlist.push_back(server);
 		}
-		std::cout << "Line: " << line << std::endl; 
 	}
 	return serverlist;
 }
 
 
 
-//exemple a parser
-
-/*
-
-server
-{
-    listen 8080;
-    root /var/www/html;
-    domain_name webserv.com;
-    location /images
-    {
-        root /var/www/images;
-        methods GET;
-    }
-}
-
-*/
 
 /*
 
