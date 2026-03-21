@@ -89,17 +89,39 @@ std::vector<ServerConfig> parseConfig(std::string path)
 						std::istringstream locationStream(locationLine);
 						std::string location_word;
 						locationStream >> location_word;
-						/*
-						if (location_word == "root") {}
-						else if (location_word == "index") {}
-						else if (location_word == "methods") {}
-						else if (location_word == "show_directory") {}
+						if (location_word == "root")
+						{
+							std::string root_path;
+							locationStream >> root_path; //recup path de root
+							root_path = root_path.substr(0, root_path.find(";")); // enleve le ;
+							location.root = root_path; // assigne a location.root
+						}
+						
+						else if (location_word == "index")
+						{
+							std::string index_file;
+							locationStream >> index_file;
+							index_file = index_file.substr(0, index_file.find(";"));
+							location.index = index_file; 
+						}
+						else if (location_word == "methods")
+						{
+    					std::string method;
+    					while (locationStream >> method)
+    						{
+    			    		method = method.substr(0, method.find(";"));
+    			    		location.allowed_methods_http.insert(method); // insert directement dans location
+    			    		if (method[method.size() - 1] == ';') // C++98 compatible
+    			        		break;
+    						}
+						}	
+						/*else if (location_word == "show_directory") {}
 						else if (location_word == "upload_dir") {}
 						else if (location_word == "redirect_page") {}
 						else if (location_word == "cgi_extensions") {}
 						*/
 					}
-					
+					server.locations.push_back(location);
 				}
 				
 			}
