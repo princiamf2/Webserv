@@ -33,6 +33,10 @@ $(NAME): $(OBJS)
 	$(CXX) $(OBJS) $(CXXFLAGS) -o $(NAME)
 	@echo $(NAME)" compiled!\n"
 
+debug: $(OBJS)
+	$(CXX) $(OBJS) $(CXXFLAGS) -DD=1 -o $(NAME)
+	@echo $(NAME)" compiled!\n"
+
 %.o: %.cpp
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
