@@ -1,5 +1,5 @@
 
-#include "parseConfig.hpp"
+#include "ParseConfig.hpp"
 #include <iostream> //on en aura besoin pour afficher les erreurs et infos (cerr et cout)
 
 static bool parseLocation_Root(std::istringstream& locationStream, Location& location) //parse le root (uri du dossier racine)

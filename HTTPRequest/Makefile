@@ -3,23 +3,26 @@ CXX      = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98
 INCLUDES = -I. -I../Parsing
 
-HTTP_SRC    = HttpParser.cpp \
-              HttpResponse.cpp \
-              HttpResponseBuilder.cpp \
-              RequestHandler.cpp \
-              main_test.cpp
+HTTP_SRC = HttpParser.cpp \
+           HttpResponse.cpp \
+           HttpResponseBuilder.cpp \
+           RequestHandler.cpp \
+           main_test.cpp
 
-PARSING_SRC = ../Parsing/ParseConfig.cpp
-
-SRC = $(HTTP_SRC) $(PARSING_SRC)
+PARSING_SRC = ../Parsing/ParseConfig.cpp \
+              ../Parsing/ParseServer.cpp \
+              ../Parsing/ParseLocation.cpp
 
 OBJ_DIR = obj
+
 OBJ = $(OBJ_DIR)/HttpParser.o \
       $(OBJ_DIR)/HttpResponse.o \
       $(OBJ_DIR)/HttpResponseBuilder.o \
       $(OBJ_DIR)/RequestHandler.o \
       $(OBJ_DIR)/main_test.o \
-      $(OBJ_DIR)/ParseConfig.o
+      $(OBJ_DIR)/ParseConfig.o \
+      $(OBJ_DIR)/ParseServer.o \
+      $(OBJ_DIR)/ParseLocation.o
 
 DEPS = $(OBJ:.o=.d)
 
@@ -44,6 +47,12 @@ $(OBJ_DIR)/main_test.o: main_test.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
 
 $(OBJ_DIR)/ParseConfig.o: ../Parsing/ParseConfig.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
+
+$(OBJ_DIR)/ParseServer.o: ../Parsing/ParseServer.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
+
+$(OBJ_DIR)/ParseLocation.o: ../Parsing/ParseLocation.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
 
 $(OBJ_DIR):
