@@ -52,3 +52,32 @@ HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
     }
     return request;
 }
+
+// TODO:
+// Le parsing HTTP est incomplet et incorrect sur plusieurs points:
+//
+// 1. Fin des headers:
+//    Une requête HTTP sépare les headers du body par une ligne vide ("\r\n").
+//    Il faut arrêter la lecture des headers dès que line == "".
+//    Sinon, le body est interprété comme un header -> erreur.
+//
+// 2. Lecture du body:
+//    request.body n'est jamais rempli actuellement.
+//    Il faut lire le reste du stream après les headers.
+//
+// 3. Content-Length:
+//    Pour les requêtes POST, il faut lire exactement le nombre d'octets indiqué
+//    dans le header "Content-Length". Sinon, le body peut être incomplet ou trop lu.
+//
+// 4. Header Host:
+//    En HTTP/1.1, le header "Host" est obligatoire.
+//    Il faudra vérifier sa présence et sinon retourner une erreur 400.
+//
+// 5. URI:
+//    L'URI est stockée brute.
+//    Il faudra plus tard la découper en:
+//       - path (pour le routing)
+//       - query string (optionnelle)
+//
+// Sans ces corrections, le parsing HTTP est non conforme et instable.
+//nico

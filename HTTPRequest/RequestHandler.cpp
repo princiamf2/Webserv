@@ -50,6 +50,28 @@ static std::string buildFilePath(std::string const& root, std::string const& uri
 	}
 	return root + relativPath;
 }
+
+// TODO:
+// Cette fonction utilise directement l'URI pour construire un chemin filesystem,
+// ce qui pose plusieurs problèmes critiques:
+//
+// 1. Query string:
+//    L'URI peut contenir "?...", qui ne doit pas être utilisé pour accéder au fichier.
+//    Il faut utiliser uniquement le path.
+//
+// 2. Sécurité:
+//    Aucune protection contre les attaques de type "../" (directory traversal).
+//    Exemple: GET /../../etc/passwd
+//    Il faut normaliser ou refuser ce type de chemin.
+//
+// 3. Mapping direct URI -> filesystem:
+//    Ce mapping est trop naïf.
+//    Il faut s'assurer que le chemin final reste bien dans le root configuré.
+//
+// Sans ces protections, le serveur est vulnérable et incorrect.
+//nico 
+
+
 //lire le fichier ce trouvant sur le path crée
 static bool readFileContent(std::string const& filePath, std::string& content)
 {
@@ -190,6 +212,17 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		response.body = "File created at: " + filePath + "\n";
 		return response;
 	}
+	// TODO:
+// Le chemin de sortie est actuellement hardcodé:
+//     root + "/upload.txt"
+//
+// Il faut:
+//   - utiliser location->upload_dir si défini
+//   - éventuellement utiliser un nom dynamique (ex: timestamp, nom envoyé, etc.)
+//
+// Sinon, toutes les requêtes POST écrasent le même fichier, ce qui est incorrect.
+//nico
+
 	if (request.method == "DELETE")
 	{
 		std::string filePath = buildFilePath(root, request.uri, location, server);
@@ -216,3 +249,39 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 	response.body = "500 Internal Server Error\n";
 	return response;
 }
+
+// TODO:
+// Cette fonction n'utilise pas encore pleinement la configuration issue de ServerConfig et Location.
+//
+// Problèmes actuels:
+//
+// 1. error_pages:
+//    Les pages d'erreur configurées dans server.error_pages ne sont jamais utilisées.
+//    Il faut servir les fichiers d'erreur personnalisés si définis.
+//
+// 2. upload_dir:
+//    Les requêtes POST écrivent toujours dans "root/upload.txt".
+//    Il faut utiliser location->upload_dir si défini.
+//
+// 3. redirect_page:
+//    Les redirections configurées (code + URL) ne sont pas gérées.
+//    Il faut détecter et retourner une réponse 3xx avec header Location.
+//
+// 4. show_directory:
+//    Si aucun index n'est trouvé et show_directory == true,
+//    il faut générer un listing du dossier.
+//
+// 5. cgi_extensions:
+//    Les extensions CGI sont parsées mais jamais utilisées.
+//    Il faudra détecter ces fichiers et les exécuter via CGI.
+//
+// 6. HTTP logique:
+//    Certaines erreurs devraient être plus fines:
+//      - 400 (Bad Request)
+//      - 403 (Forbidden)
+//      - 404 (Not Found)
+//    Actuellement tout est simplifié.
+//
+// Conclusion:
+//    La config est bien parsée mais pas encore réellement appliquée ici.
+//nico

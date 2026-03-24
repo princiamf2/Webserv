@@ -25,8 +25,6 @@ static bool parseLocation_Methods(std::istringstream& locationStream, Location& 
     {
         method = stripSemicolon(method);
         location.allowed_methods_http.insert(method);
-        if (method[method.size() - 1] == ';')
-            break;
     }
     return true;
 }
@@ -73,8 +71,6 @@ static bool parseLocation_CgiExtensions(std::istringstream& locationStream, Loca
     {
         cgi_extension = stripSemicolon(cgi_extension);
         location.cgi_extensions.insert(cgi_extension);
-        if (cgi_extension[cgi_extension.size() - 1] == ';')
-            break;
     }
     return true;
 }
