@@ -1,0 +1,62 @@
+#pragma once
+
+//====================(INCLUDES)============================//
+#include <iostream>
+#include <sys/socket.h>
+#include <poll.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <poll.h>
+#include <cstring>
+
+#include "colors.hpp"
+#include "../Parsing/Location.hpp"
+#include "../Parsing/ParseConfig.hpp"
+
+
+//====================(DEFINES)=============================//
+# define SUCCESS 1
+# define FAIL 0
+
+//====================(STRUCTS)=============================//
+// client
+struct Client {
+	int		 fd;
+	std::string read_buf;   // recieve
+	std::string write_buf;  // to send
+	// others : adresse IP, config serveur associée, etc
+};
+
+//====================(DECLARATIONS)========================//
+
+class Server
+{
+	private:
+		std::string                 _host;              // like "0.0.0.0"
+		std::set<unsigned int>      _ports;             // like 8080
+		std::set<std::string>       _domainNames;       // like hello.ch
+		std::string                 _root;              // like ~/Webserv/srcs/
+	    std::string                 _index;             // like ~/Webserv/srcs/index.html
+		std::map<int, std::string>  _errorPages;        // like ~/Webserv/srcs/404.html
+		unsigned int                _clientMaxBodySize; // like 100 for 100 Mo
+		std::vector<Location>       _locations;         // ikd ?
+		std::vector<int>            _listenFds;         // fds lisned to
+		std::map<int, Client>       _clients;           // fds -> client they correspond
+		bool                        _autoindex;         // page autoindex or not
+
+	public:
+		Server(ServerConfig serv);
+		~Server();
+		int         init(void);                         // init of the binds listen etc
+		int         acceptClient(int listen_fd);        // add a client to fds list
+		void        readClient(int fd);                 // read what client sent
+		void        writeClient(int fd);                // write to the client
+		void        closeClient(int fd);                // close connection to client
+		std::vector<int>& getListenFds(void);           // getter for fds
+		void debug();
+};
+
+//============(UTILS)====================//
+//error
+int error(std::string s);

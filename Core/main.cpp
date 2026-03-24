@@ -10,16 +10,9 @@ int main(int ac, char **av)
 	}
 
 	std::vector<ServerConfig> configs = parseConfig(av[1]);
-	std::vector<Server> servers;
-
-	for (size_t i = 0; i < configs.size(); i++)
-	{
-		Server s(configs[i]);
-		if (s.start() != SUCCESS)
-			return (FAIL);
-		servers.push_back(s);
-	}
+	Core C(configs);
+	C.debug();
 
 	// loop(servers); //will need to fork to handle multiple servers
-	return (servers[0].loop());
+	return (0);
 }
