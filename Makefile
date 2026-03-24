@@ -10,7 +10,9 @@ OBJSCORE = $(SRCSCORE:.cpp=.o)
 
 
 P = ./Parsing/
-SRCSPARSING = $(P)ParseConfig.cpp
+SRCSPARSING = $(P)ParseConfig.cpp \
+              $(P)ParseServer.cpp \
+              $(P)ParseLocation.cpp
 OBJSPARSING = $(SRCSPARSING:.cpp=.o)
 
 
@@ -31,6 +33,10 @@ all: $(NAME)
 
 $(NAME): $(OBJS)
 	$(CXX) $(OBJS) $(CXXFLAGS) -o $(NAME)
+	@echo $(NAME)" compiled!\n"
+
+debug: $(OBJS)
+	$(CXX) $(OBJS) $(CXXFLAGS) -DD=1 -o $(NAME)
 	@echo $(NAME)" compiled!\n"
 
 %.o: %.cpp
