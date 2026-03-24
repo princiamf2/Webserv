@@ -37,6 +37,7 @@ class Core
 		~Core();
 		void addFdsToCore(size_t serverIndex);
 		int  init(void);                         // init of the binds listen etc
+		void runPoll();                     // run main loop with poll
 		void debug();
 };
 
