@@ -10,7 +10,9 @@ OBJSCORE = $(SRCSCORE:.cpp=.o)
 
 
 P = ./Parsing/
-SRCSPARSING = $(P)ParseConfig.cpp
+SRCSPARSING = $(P)ParseConfig.cpp \
+              $(P)ParseServer.cpp \
+              $(P)ParseLocation.cpp
 OBJSPARSING = $(SRCSPARSING:.cpp=.o)
 
 
