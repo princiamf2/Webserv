@@ -22,6 +22,21 @@ static const Location* findLocation(ServerConfig const& server, std::string cons
 	}
 	return best;
 }
+// TODO:
+// Cette fonction matche actuellement les locations en utilisant request.uri brut,
+// ce qui est incorrect car l'URI peut contenir une query string (ex: /images/logo.png?x=1).
+//
+// Il faut:
+//   1. utiliser uniquement le path HTTP (sans la partie ?query)
+//   2. éviter les faux positifs:
+//        exemple: "/images2" ne doit PAS matcher la location "/images"
+//
+// Solution:
+//   - travailler avec request.path (à ajouter dans HttpRequest)
+//   - vérifier que le match est soit exact, soit suivi d'un '/'.
+//
+// Sinon, le routing HTTP sera incorrect dans plusieurs cas.
+//nico
 
 int main(int argc, char **argv)
 {
@@ -93,3 +108,36 @@ int main(int argc, char **argv)
 
 	return 0;
 }
+
+// TODO:
+// Actuellement, on utilise toujours servers[0], ce qui est incorrect dans un vrai serveur HTTP.
+// Il faut sélectionner dynamiquement le bon ServerConfig en fonction :
+//   - du port d'écoute de la socket (listen_ports)
+//   - du header "Host" présent dans la requête HTTP (domain_names)
+//
+// Exemple attendu :
+//   - récupérer le port sur lequel la requête est reçue
+//   - récupérer le header Host depuis request.headers["Host"]
+//   - parcourir tous les ServerConfig et trouver celui qui correspond
+//
+// Sans ça, toute la configuration multi-serveurs est inutile et ignorée.
+//nico
+
+
+
+
+
+// TODO GLOBAL pour tout les TODO tous les fichiers:
+//
+// La configuration (ServerConfig / Location) est bien définie,
+// mais elle n'est pas encore pleinement utilisée dans la logique HTTP.
+//
+// Les points critiques à corriger sont:
+//   - sélection dynamique du serveur (Host + port)
+//   - utilisation correcte du path (sans query)
+//   - parsing HTTP complet (headers + body)
+//   - application réelle de toutes les options de config
+//
+// Actuellement, le code fonctionne pour des tests simples,
+// mais ne respecte pas encore le comportement attendu d'un serveur HTTP.
+//nico
