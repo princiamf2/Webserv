@@ -1,5 +1,5 @@
 
-#include "parseConfig.hpp"
+#include "ParseConfig.hpp"
 #include <iostream> //on en aura besoin pour afficher les erreurs et infos (cerr et cout)
 
 bool parseServer_Listen(std::istringstream& lineStream, ServerConfig& server) //parse le port d'ecoute du serveur et l'ajoute a la liste des ports d'ecoute du serveur

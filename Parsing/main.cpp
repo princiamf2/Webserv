@@ -64,3 +64,65 @@ int main(int argc, char **argv)
     printServers(servers);
     return 0;
 }
+
+// TODO (ROBUSTESSE DU PARSING GLOBAL):
+// Le parsing actuel fonctionne uniquement si la configuration est parfaitement formatée,
+// mais il est fragile face aux variations ou aux erreurs de syntaxe.
+//
+// Problèmes à corriger:
+//
+// 1. Détection des blocs:
+//    - parseConfig utilise line.find("server") → trop permissif.
+//    - Il faut détecter explicitement "server" comme mot-clé suivi de "{".
+//    - Éviter les faux positifs (ex: "myserver", commentaires, etc.).
+//
+// 2. Gestion des accolades { }:
+//    - parseServer et parseLocation s'arrêtent sur un simple find("}").
+//    - Cela ne garantit pas que les blocs sont correctement imbriqués.
+//    - Il faut:
+//        - vérifier l'ouverture explicite avec "{"
+//        - suivre correctement les niveaux d'imbrication
+//        - s'assurer que chaque "{" a un "}" correspondant
+//
+// 3. Parsing des locations:
+//    - location.path est lu sans vérifier la présence du "{".
+//    - Il faut valider la syntaxe:
+//          location /path {
+//              ...
+//          }
+//
+// 4. Sensibilité aux espaces et format:
+//    - le parsing dépend fortement du format exact (espaces, retours à la ligne).
+//    - il faut:
+//        - ignorer les lignes vides
+//        - ignorer les espaces en début/fin
+//        - tolérer des formats légèrement différents
+//
+// 5. Découpage des lignes:
+//    - le parsing se fait ligne par ligne sans vérifier la structure complète.
+//    - certaines directives pourraient être mal interprétées si mal formatées.
+//
+// 6. stripSemicolon:
+//    - suppose que ";" est toujours présent et bien placé.
+//    - ne vérifie pas si le ";" est absent ou mal positionné.
+//
+// 7. Lecture partielle des directives:
+//    - certaines fonctions lisent seulement une partie de la ligne sans vérifier qu'elle est complète.
+//    - ex: domain_name ne lit qu'une valeur.
+//
+// 8. Absence de validation structurelle:
+//    - aucune vérification globale de cohérence:
+//        - server sans contenu
+//        - location mal fermée
+//        - directives hors bloc
+//
+// Conclusion:
+// Le parseur doit être rendu plus strict et structuré:
+//   - parsing basé sur des blocs bien définis (server/location)
+//   - validation explicite des ouvertures/fermetures
+//   - suppression des heuristiques basées sur find()
+//   - indépendance vis-à-vis du formatage (espaces, lignes)
+//
+// Sans ces corrections, le parseur acceptera des configurations invalides
+// ou plantera sur des cas pourtant valides.
+

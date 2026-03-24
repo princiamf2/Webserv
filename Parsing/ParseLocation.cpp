@@ -1,5 +1,5 @@
 
-#include "parseConfig.hpp"
+#include "ParseConfig.hpp"
 #include <iostream> //on en aura besoin pour afficher les erreurs et infos (cerr et cout)
 
 static bool parseLocation_Root(std::istringstream& locationStream, Location& location) //parse le root (uri du dossier racine)
@@ -20,15 +20,13 @@ static bool parseLocation_Index(std::istringstream& locationStream, Location& lo
 
 static bool parseLocation_Methods(std::istringstream& locationStream, Location& location) //parse les methodes GET, POST, DELETE
 {
-	std::string method;
-	while (locationStream >> method)
-	{
-		method = stripSemicolon(method);
-		location.allowed_methods_http.insert(method);
-		if (method[method.size() - 1] == ';')
-			break;
-	}
-	return true;
+    std::string method;
+    while (locationStream >> method)
+    {
+        method = stripSemicolon(method);
+        location.allowed_methods_http.insert(method);
+    }
+    return true;
 }
 
 static bool parseLocation_ShowDirectory(std::istringstream& locationStream, Location& location) //(true ou false) afficher la liste des fichiers du dossier racine si pas d'index
@@ -69,15 +67,13 @@ static bool parseLocation_RedirectPage(std::istringstream& locationStream, Locat
 
 static bool parseLocation_CgiExtensions(std::istringstream& locationStream, Location& location) //parser les extensions de fichiers pour lesquelles le CGI est actif (ex: .py ou .php)
 {
-	std::string cgi_extension;
-	while (locationStream >> cgi_extension)
-	{
-		cgi_extension = stripSemicolon(cgi_extension);
-		location.cgi_extensions.insert(cgi_extension);
-		if (cgi_extension[cgi_extension.size() - 1] == ';')
-			break;
-	}
-	return true;
+    std::string cgi_extension;
+    while (locationStream >> cgi_extension)
+    {
+        cgi_extension = stripSemicolon(cgi_extension);
+        location.cgi_extensions.insert(cgi_extension);
+    }
+    return true;
 }
 
 bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, ServerConfig& server) //parse une location et l'ajoute a la liste des locations du serveur
