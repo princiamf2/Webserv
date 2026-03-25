@@ -204,20 +204,70 @@ static int resolveRedirectCode(Location const* location)
 		return code;
 	return 302;
 }
-//mets la bonne phrase celon le bon code
-static std::string getResolveRedirectPhrase(int code)
+//mets la bonne raison celon le bon code
+std::string getReasonPhrase(int code)
 {
-	if (code == 301)
-		return "Moved Permanently";
-	if (code == 302)
-		return "Found";
-	if (code == 303)
-		return "See Other";
-	if (code == 307)
-		return "Temporary Redirect";
-	if (code == 308)
-		return "Permanent Redirect";
-	return "Found";
+	switch (code)
+	{
+	case 200: return "Ok";
+	case 201: return "Created";
+	case 301: return "Moved Permanently";
+	case 302: return "Found";
+	case 303: return "See Other";
+	case 307: return "Temporary Redirect";
+	case 308: return "Permanent Redirect";
+	case 400: return "Bad Request";
+	case 403: return "Forbidden";
+	case 404: return "Not Found";
+	case 405: return "Method Not Allowed";
+	case 413: return "Payload Too Large";
+	case 500: return "Internal Server Error";
+	case 501: return "Not Implemented";
+	case 505: return "HTTP Version Not Suppoted";
+	default: return "Internal Server Error";
+	}
+}
+static std::string intToString(int n)
+{
+	std::ostringstream oss;
+	oss << n;
+	return oss.str();
+}
+static std::string buildErrorBody(int code, std::string const& path, bool directoryListingDenied)
+{
+	std::string body = intToString(code) + " " + getReasonPhrase(code) + "\n";
+	if (path.empty())
+		return body;
+	if (directoryListingDenied)
+		return body + "directory listing denied: " + path + "\n";
+	return body + "file path = " + path + "\n";
+}
+static bool getErrorPagePath(ServerConfig const& server, int code, std::string& path)
+{
+	std::map<int, std::string>::const_iterator it (server.error_pages.find(code));
+	if (it == server.error_pages.end())
+		return false;
+	path = it->second;
+	return true;
+}
+static HttpResponse buildErrorResponse(ServerConfig const& server, int code, std::string const& path = "", bool directoryListingDenied = false)
+{
+	HttpResponse response;
+	std::string errorPath;
+	std::string errorContent;
+
+	response.statusCode = code;
+	response.reasonPhrase = getReasonPhrase(code);
+	if (getErrorPagePath(server, code, errorPath)
+		&& readFileContent(errorPath, errorContent))
+	{
+		response.headers["Content-Type"] = getContentType(errorPath);
+		response.body = errorContent;
+		return response;
+	}
+	response.headers["Content-Type"] = "text/plain";
+	response.body = buildErrorBody(code, path, directoryListingDenied);
+	return response;
 }
 //on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
@@ -227,43 +277,19 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 
 	//si pas bonne version
     if (request.version != "HTTP/1.1")
-    {
-        response.statusCode = 505;
-        response.reasonPhrase = "HTTP Version Not Supported";
-        response.headers["Content-Type"] = "text/plain";
-        response.body = "505 HTTP Version Not Supported\n";
-        return response;
-    }
+        return buildErrorResponse(server, 505);
 
 	//si s'est pas une method que nous supportons
     if (!isSupportedMethod(request.method))
-	{
-		response.statusCode = 501;
-		response.reasonPhrase = "Not Implemented";
-		response.headers["Content-Type"] = "text/plain";
-		response.body = "501 Not Implemented\n";
-		return response;
-	}
+		return buildErrorResponse(server, 501);
 
 	//si s'est pas une methode que la location permet
 	if (!isMethodAllowed(request.method, location))
-	{
-		response.statusCode = 405;
-		response.reasonPhrase = "Method Not Allowed";
-		response.headers["Content-Type"] = "text/plain";
-		response.body = "405 Method Not Allowed\n";
-		return response;
-	}
+		return buildErrorResponse(server, 405);
 
 	//si le body depasse la taille limite
 	if (!isBodySizeValid(request, server))
-	{
-		response.statusCode = 413;
-		response.reasonPhrase = "Payload Too Large";
-		response.headers["Content-Type"] = "text/plain";
-		response.body = "413 Payload Too Large\n";
-		return response;
-	}
+		return buildErrorResponse(server, 413);
 
 	//si une redirection
 	if (hasRedirect(location))
@@ -271,7 +297,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		int code = resolveRedirectCode(location);
 
 		response.statusCode = code;
-		response.reasonPhrase = getResolveRedirectPhrase(code);
+		response.reasonPhrase = getReasonPhrase(code);
 		response.headers["Location"] = location->redirect_page.second;
 		response.headers["Content-Type"] = "text/plain";
 		response.body = "Redirecting to: " + location->redirect_page.second + "\n";
@@ -289,52 +315,17 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 			std::string indexPath = joinPath(filePath, resolveIndex(server, location));
 
 			if (readFileContent(indexPath, fileContent))
-			{
-				response.statusCode = 200;
-				response.reasonPhrase = "OK";
-				response.headers["Content-Type"] = getContentType(indexPath);
-				response.body = fileContent;
-				return response;
-			}
+				return buildErrorResponse(server, 200);
 			if (isAutoIndexEnabled(location)
 				&& buildDirectoryListing(filePath, request.uri, fileContent))
-			{
-				response.statusCode = 200;
-				response.reasonPhrase = "OK";
-				response.headers["Content-Type"] = "text/html";
-				response.body = fileContent;
-				return response;
-			}
-			response.statusCode = 403;
-			response.reasonPhrase = "Forbidden";
-			response.headers["Content-Type"] = "text/plain";
-			response.body = "403 Forbidden\n";
-			response.body += "directory listing denied: " + filePath + "\n";
-			return response;
+				return buildErrorResponse(server, 200);
+			return buildErrorResponse(server, 403, filePath, true);
 		}
 		if (!pathExists(filePath))
-		{
-			response.statusCode = 404;
-			response.reasonPhrase = "Not Found";
-			response.headers["Content-Type"] = "text/plain";
-			response.body = "404 Not Found\n";
-			response.body += "file path = " + filePath + "\n";
-			return response;
-		}
+			return buildErrorResponse(server, 404, filePath);
 		if (!readFileContent(filePath, fileContent))
-		{
-			response.statusCode = 403;
-			response.reasonPhrase = "Forbidden";
-			response.headers["Content-Type"] = "text/plain";
-			response.body = "403 Forbidden\n";
-			response.body += "file path = " + filePath + "\n";
-			return response;
-		}
-		response.statusCode = 200;
-		response.reasonPhrase = "OK";
-		response.headers["Content-Type"] = getContentType(filePath);
-		response.body = fileContent;
-		return response;
+			return buildErrorResponse(server, 403, filePath);
+		return buildErrorResponse(server, 200);
 	}
 
 	if (request.method == "POST")

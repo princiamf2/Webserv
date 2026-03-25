@@ -5,6 +5,24 @@
 #include <iostream>
 #include <vector>
 
+static Location const* findBestLocation(ServerConfig const& server,
+                                        std::string const& uri)
+{
+    Location const* best = NULL;
+    size_t bestLen = 0;
+
+    for (size_t i = 0; i < server.locations.size(); ++i)
+    {
+        Location const& loc = server.locations[i];
+
+        if (uri.find(loc.path) == 0 && loc.path.size() > bestLen)
+        {
+            best = &server.locations[i];
+            bestLen = loc.path.size();
+        }
+    }
+    return best;
+}
 int main(int argc, char **argv)
 {
 	if (argc != 2)
@@ -58,7 +76,7 @@ int main(int argc, char **argv)
 		try
 		{
 			HttpRequest request = HttpParser::parseRequest(rawRequests[i]);
-			const Location* location = findLocation(server, request.uri);
+			const Location* location = findBestLocation(server, request.uri);
 
 			HttpResponse response = RequestHandler::handleRequest(request, server, location);
 			std::string rawResponse = HttpResponseBuilder::buildResponse(response);
