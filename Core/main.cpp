@@ -12,7 +12,7 @@ int main(int ac, char **av)
 	std::vector<ServerConfig> configs = parseConfig(av[1]);
 	Core C(configs);
 	C.debug();
+	C.runPoll();
 
-	// loop(servers); //will need to fork to handle multiple servers
 	return (0);
 }

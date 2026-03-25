@@ -14,13 +14,16 @@ OBJSCORE = $(SRCSCORE:.cpp=.o)
 
 
 P = ./Parsing/
-SRCSPARSING = $(P)ParseConfig.cpp
+SRCSPARSING = $(P)ParseConfig.cpp \
+              $(P)ParseServer.cpp \
+              $(P)ParseLocation.cpp
 OBJSPARSING = $(SRCSPARSING:.cpp=.o)
 
 
 H = ./HTTPRequest/
 SRCSHTTP = $(H)HttpParser.cpp \
 			$(H)HttpResponse.cpp\
+			$(H)HttpModule.cpp\
 			$(H)HttpResponseBuilder.cpp\
 			$(H)RequestHandler.cpp\
 
