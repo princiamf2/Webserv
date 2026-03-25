@@ -65,64 +65,61 @@ int main(int argc, char **argv)
     return 0;
 }
 
-// TODO (ROBUSTESSE DU PARSING GLOBAL):
-// Le parsing actuel fonctionne uniquement si la configuration est parfaitement formatée,
-// mais il est fragile face aux variations ou aux erreurs de syntaxe.
-//
-// Problèmes à corriger:
-//
-// 1. Détection des blocs:
-//    - parseConfig utilise line.find("server") → trop permissif.
-//    - Il faut détecter explicitement "server" comme mot-clé suivi de "{".
-//    - Éviter les faux positifs (ex: "myserver", commentaires, etc.).
-//
-// 2. Gestion des accolades { }:
-//    - parseServer et parseLocation s'arrêtent sur un simple find("}").
-//    - Cela ne garantit pas que les blocs sont correctement imbriqués.
-//    - Il faut:
-//        - vérifier l'ouverture explicite avec "{"
-//        - suivre correctement les niveaux d'imbrication
-//        - s'assurer que chaque "{" a un "}" correspondant
-//
-// 3. Parsing des locations:
-//    - location.path est lu sans vérifier la présence du "{".
-//    - Il faut valider la syntaxe:
-//          location /path {
-//              ...
-//          }
-//
-// 4. Sensibilité aux espaces et format:
-//    - le parsing dépend fortement du format exact (espaces, retours à la ligne).
-//    - il faut:
-//        - ignorer les lignes vides
-//        - ignorer les espaces en début/fin
-//        - tolérer des formats légèrement différents
-//
-// 5. Découpage des lignes:
-//    - le parsing se fait ligne par ligne sans vérifier la structure complète.
-//    - certaines directives pourraient être mal interprétées si mal formatées.
-//
-// 6. stripSemicolon:
-//    - suppose que ";" est toujours présent et bien placé.
-//    - ne vérifie pas si le ";" est absent ou mal positionné.
-//
-// 7. Lecture partielle des directives:
-//    - certaines fonctions lisent seulement une partie de la ligne sans vérifier qu'elle est complète.
-//    - ex: domain_name ne lit qu'une valeur.
-//
-// 8. Absence de validation structurelle:
-//    - aucune vérification globale de cohérence:
-//        - server sans contenu
-//        - location mal fermée
-//        - directives hors bloc
-//
-// Conclusion:
-// Le parseur doit être rendu plus strict et structuré:
-//   - parsing basé sur des blocs bien définis (server/location)
-//   - validation explicite des ouvertures/fermetures
-//   - suppression des heuristiques basées sur find()
-//   - indépendance vis-à-vis du formatage (espaces, lignes)
-//
-// Sans ces corrections, le parseur acceptera des configurations invalides
-// ou plantera sur des cas pourtant valides.
 
+// TODO (VALIDATION PLUS STRICTE / AMELIORATIONS POSSIBLES):
+// Le parsing actuel est fonctionnel et déjà robuste pour le niveau attendu,
+// mais il peut encore être rendu plus strict sur certains points.
+//
+// Améliorations possibles :
+//
+// 1. Directives obligatoires
+//    - Vérifier qu'un bloc server contient au moins un listen.
+//    - Éventuellement imposer certaines directives minimales selon la logique voulue.
+//
+// 2. Duplication de directives
+//    - Refuser les directives dupliquées si elles ne doivent apparaître qu'une fois.
+//    - Exemples possibles :
+//         root
+//         index
+//         client_max_body_size
+//         show_directory
+//         upload_dir
+//
+// 3. Validation plus stricte des chemins
+//    - Vérifier que les chemins filesystem (root, upload_dir, error_page path) sont cohérents.
+//    - Vérifier que les paths HTTP de location commencent bien par '/'.
+//
+// 4. Validation plus stricte des extensions CGI
+//    - Vérifier qu'une extension CGI commence bien par '.'.
+//    - Exemples valides : .php, .py
+//
+// 5. Gestion stricte des ';'
+//    - Vérifier explicitement que les directives qui doivent finir par ';' le possèdent bien.
+//    - Éviter qu'une ligne incomplète soit acceptée silencieusement.
+//
+// 6. Arguments en trop
+//    - Après parsing d'une directive, vérifier qu'il ne reste pas de tokens inattendus.
+//    - Exemple à refuser :
+//         listen 8080 extra;
+//         root /var/www extra;
+//
+// 7. Duplication de valeurs dans certaines listes
+//    - Optionnellement refuser les doublons dans methods ou cgi_extensions,
+//      au lieu de simplement les absorber dans un std::set.
+//
+// 8. Validation de fin de bloc plus sémantique
+//    - Vérifier qu'un bloc server ou location n'est pas vide si cela doit être interdit.
+//    - Vérifier qu'une location possède les éléments minimaux attendus si nécessaire.
+//
+// 9. Cohérence logique entre directives
+//    - Optionnellement vérifier des incohérences de configuration.
+//    - Exemples :
+//         upload_dir sans méthode POST
+//         cgi_extensions sans logique CGI derrière
+//
+// 10. Messages d'erreur encore plus précis
+//    - Ajouter si besoin le nom exact de la directive fautive,
+//      voire le contenu de la ligne, pour faciliter le debug.
+//
+// Ces points ne remettent pas en cause le parsing actuel,
+// mais correspondent à une version encore plus stricte et défensive.

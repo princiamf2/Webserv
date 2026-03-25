@@ -10,45 +10,66 @@ std::string stripSemicolon(const std::string& s) //pour enlever le ; a la fin de
 	return s.substr(0, s.find(";"));
 }
 
-std::vector<ServerConfig> parseConfig(std::string path)
+bool expectOpenBracket(std::istringstream& current_line, std::istringstream& stream)
 {
-	std::ifstream configFile(path.c_str()); //ouvrir le fichier de config
-	if (!configFile.is_open())
-	{
-		std::cerr << "Error opening config file " << path << std::endl;
-		return std::vector<ServerConfig>();
-	} 
-
-	std::string content((std::istreambuf_iterator<char>(configFile)), std::istreambuf_iterator<char>()); //lire le contenu du fichier de config
-	if (content.empty())
-	{
-		std::cerr << "config file is empty" << std::endl;
-		return std::vector<ServerConfig>();
-	}
-
-	std::istringstream stream(content);
-	std::string line;
-	std::vector<ServerConfig> serverlist;
-
-	while (std::getline(stream, line))
-	{
-		if (line.find("server") != std::string::npos)
-		{
-			ServerConfig server;
-			if (!parseServer(stream, server))
-				return std::vector<ServerConfig>();
-			serverlist.push_back(server);
-		}
-	}
-	return serverlist;
+    std::string bracket;
+    current_line >> bracket;
+    if (bracket != "{")
+    {
+        std::getline(stream, bracket);
+        std::istringstream iss(bracket);
+        std::string bracket;
+        iss >> bracket;
+        if (bracket != "{")
+        {
+            std::cerr << "Error: expected '{'" << std::endl;
+            return false;
+        }
+    }
+    return true;
 }
 
-//A FAIRE : ajouter des verifications d'erreur pour chaque parseur de serveur
-//(ex: verifier que le port est un nombre valide, que la taille maximale du corps de la requete est un nombre valide, etc...)
+std::vector<ServerConfig> parseConfig(std::string path)
+{
+    std::ifstream configFile(path.c_str());
+    if (!configFile.is_open())
+    {
+        std::cerr << "Error opening config file " << path << std::endl;
+        return std::vector<ServerConfig>();
+    }
+    std::string content((std::istreambuf_iterator<char>(configFile)), std::istreambuf_iterator<char>());
+    if (content.empty())
+    {
+        std::cerr << "config file is empty" << std::endl;
+        return std::vector<ServerConfig>();
+    }
+    std::istringstream stream(content);
+    std::string line;
+    std::vector<ServerConfig> serverlist;
+    while (std::getline(stream, line))
+    {
+        std::istringstream in_ss(line);
+        std::string name_to_parse;
+        in_ss >> name_to_parse;
+		if (name_to_parse.empty() || name_to_parse.substr(0, 2) == "//") //pour les commentaires et les lignes vides
+    		continue;
+        if (name_to_parse == "server")
+        {
+            if (!expectOpenBracket(in_ss, stream))
+                return std::vector<ServerConfig>();
+            ServerConfig server;
+            if (!parseServer(stream, server))
+                return std::vector<ServerConfig>();
+            serverlist.push_back(server);
+        }
+    }
+    return serverlist;
+}
+
 
 
 /*
 
-c++ -Wall -Wextra -Werror -std=c++98 main.cpp ParseConfig.cpp ParseServer.cpp ParseLocation.cpp -o webserv
+c++ -Wall -Wextra -Werror -std=c++98 main.cpp ParseConfig.cpp ParseServer.cpp ParseLocation.cpp -o webserv && ./webserv test.config
 
 */
