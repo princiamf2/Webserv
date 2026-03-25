@@ -1,0 +1,1400 @@
+#include "HttpParser.hpp"
+#include <sstream>
+#include <stdexcept>
+
+// petit outil pour retirer espace au debut et a la fin 
+static std::string trim(const std::string& str)
+{
+    size_t start = 0;
+    size_t end = str.size();
+
+    while (start < str.size() && (str[start] == ' ' || str[start] == '\t' || str[start] == '\r'))
+        start++;
+    while (end > start && (str[end - 1] == ' ' || str[end - 1] == '\t' || str[end - 1] == '\r'))
+        end--;
+    return str.substr(start, end - start);
+}
+
+HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
+{
+    HttpRequest request;//une requete 
+    size_t headerEnd = rawRequest.find("\r\n\r\n");//je prends la position du separateur entre header et body
+
+    if (headerEnd == std::string::npos)//si il existe pas je renvoi une exception une requete dois toujours avoir ce separateur
+        throw std::runtime_error("Invalid HTTP request: missing header/body separator");
+
+    std::string headerPart = rawRequest.substr(0, headerEnd);//je stock la partie header de la requete du debut de la requte jusqu'au separateur
+    request.body = rawRequest.substr(headerEnd + 4);//et je stock le body dans request.body car la s'est le header qui m'interresse
+
+    std::istringstream stream(headerPart);//ici je transforme la partie header en flux ce qui veux dire que ça va lire la ligne un peux comme un file en prenant chaque mot separe par des espace meme multiple
+    std::string line;//la variable que je vais utiliser dans getline
+
+    if (!std::getline(stream, line))//je lie la premiere ligne si il y a rien a lire je renvoi une erreur
+        throw std::runtime_error("Invalid HTTP request: empty request");
+    if (!line.empty() && line[line.size() - 1] == '\r')//je regarde si la ligne que j'ai lu a '\r' a la fin ou il est pas vide
+        line.erase(line.size() - 1);//si il a '\r' je l'enleve
+
+    std::istringstream requestLine(line);//je transforme la ligne en flux 
+    if (!(requestLine >> request.method >> request.uri >> request.version))//je mets chaque partie de la line ou il faut car une requete doit toujours commecer par la method le uri et la version
+        throw std::runtime_error("Invalid HTTP request line");             //pour le moment je verifie pas si les methode sont corect etc...
+
+    //ici je lis le reste de hearder et je cherche : qui est le separateur key value
+    while (std::getline(stream, line))
+    {
+        if (!line.empty() && line[line.size() - 1] == '\r')
+            line.erase(line.size() - 1);
+        size_t colonPos = line.find(':');
+        if (colonPos == std::string::npos)
+            throw std::runtime_error("Invalid header line");
+        std::string key = trim(line.substr(0, colonPos));
+        std::string value = trim(line.substr(colonPos + 1));
+        request.headers[key] = value;
+    }
+    return request;
+}#ifndef HTTPPARSER_HPP
+#define HTTPPARSER_HPP
+
+#include "HttpRequest.hpp"
+
+// class avec juste une methode static pour l'instant pour parser les requete
+
+class HttpParser
+{
+    public:
+        static HttpRequest parseRequest(std::string const&);
+};
+
+#endif /* HTTPPARSER_HPP */
+#ifndef HTTPREQUEST_HPP
+#define HTTPREQUEST_HPP
+
+#include <string>
+#include <map>
+
+//class request qui contien que des membres
+class HttpRequest
+{
+    public:
+        std::string method;
+        std::string uri;
+        std::string version;
+        std::map<std::string, std::string> headers;
+        std::string body;
+};
+
+#endif /* HTTPREQUEST_HPP */
+#include "HttpResponse.hpp"
+
+//constructeur de la class reponse
+HttpResponse::HttpResponse() : statusCode(200), reasonPhrase("OK") {}#ifndef HTTPRESPONSE_HPP
+#define HTTPRESPONSE_HPP
+
+#include <string>
+#include <map>
+
+//la class response que lui contien aussi un constructeur
+class HttpResponse
+{
+    public:
+        int statusCode;
+        std::string reasonPhrase;
+        std::map<std::string, std::string> headers;
+        std::string body;
+
+        HttpResponse();
+};
+
+#endif /* HTTPRESPONSE_HPP */
+#include "HttpResponseBuilder.hpp"
+#include "HttpResponse.hpp"
+#include <sstream>
+
+std::string HttpResponseBuilder::buildResponse(HttpResponse const& response)
+{
+    std::ostringstream out;
+
+    out << "HTTP/1.1 " << response.statusCode << " " << response.reasonPhrase << "\r\n";
+
+    for (std::map<std::string, std::string>::const_iterator it = response.headers.begin();
+        it != response.headers.end(); ++it)
+        out << it->first << ": " << it->second << "\r\n";
+    out << "Content-Length: " << response.body.size() << "\r\n";
+    out << "\r\n";
+    out << response.body;
+    return out.str();
+}#ifndef HTTPRESPONSEBUILDER_HPP
+#define HTTPRESPONSEBUILDER_HPP
+
+#include "HttpResponse.hpp"
+
+class HttpResponseBuilder
+{
+    public:
+        static std::string buildResponse(HttpResponse const&);
+};
+
+#endif /* HTTPRESPONSEBUILDER_HPP */
+// HTTPRequest/HttpModule.cpp
+#include "HttpModule.hpp"
+#include "HttpParser.hpp"
+#include "RequestHandler.hpp"
+#include "HttpResponseBuilder.hpp"
+#include <cstddef>
+
+// choisit la location la plus précise : plus long préfixe qui matche l'URI
+static Location const* findBestLocation(ServerConfig const& server,
+                                        std::string const& uri)
+{
+    Location const* best = NULL;
+    size_t bestLen = 0;
+
+    for (size_t i = 0; i < server.locations.size(); ++i)
+    {
+        Location const& loc = server.locations[i];
+
+        if (uri.find(loc.path) == 0 && loc.path.size() > bestLen)
+        {
+            best = &server.locations[i];
+            bestLen = loc.path.size();
+        }
+    }
+    return best;
+}
+
+// transforme toute erreur interne en réponse HTTP exploitable
+static std::string buildSimpleErrorResponse(int code,
+                                            std::string const& reason,
+                                            std::string const& body)
+{
+    HttpResponse response;
+    response.statusCode = code;
+    response.reasonPhrase = reason;
+    response.body = body;
+    response.headers["Content-Type"] = "text/plain";
+    return HttpResponseBuilder::buildResponse(response);
+}
+
+std::string handleRawHttpRequest(std::string const& rawRequest,
+                                 ServerConfig const& server)
+{
+    try
+    {
+        HttpRequest request = HttpParser::parseRequest(rawRequest);
+        Location const* location = findBestLocation(server, request.uri);
+        HttpResponse response = RequestHandler::handleRequest(request, server, location);
+        return HttpResponseBuilder::buildResponse(response);
+    }
+    catch (const std::exception& e)
+    {
+        return buildSimpleErrorResponse(400, "Bad Request", e.what());
+    }
+}// HTTPRequest/HttpModule.hpp
+#ifndef HTTPMODULE_HPP
+#define HTTPMODULE_HPP
+
+#include <string>
+#include "../Parsing/ServerConfig.hpp"
+
+std::string handleRawHttpRequest(std::string const& rawRequest,
+                                 ServerConfig const& server);
+
+#endif#include "RequestHandler.hpp"
+#include <sstream>
+#include <fstream>
+#include <string>
+#include <cstdio>
+#include <sys/stat.h>
+#include <dirent.h>
+
+//petit check de la taile du body
+static bool isBodySizeValid(HttpRequest const& request, ServerConfig const& server)
+{
+	if (server.client_max_body_size == 0)
+		return true;
+	return (request.body.size() <= server.client_max_body_size);
+}
+//renvoi le bon root
+static std::string resolveRoot(ServerConfig const& server, Location const* location)
+{
+	if (location && !location->root.empty())
+		return location->root;
+	return server.root;
+}
+//petit outil qui check les methods si la method on la supporte
+static bool isSupportedMethod(std::string const& method)
+{
+    return (method == "GET" || method == "POST" || method == "DELETE");
+}
+//petit outil qui check si la methode et autoriser dans une location
+static bool isMethodAllowed(std::string const& method, Location const* location)
+{
+	if (!location)
+		return true;
+	if (location->allowed_methods_http.empty())
+		return true;
+	return (location->allowed_methods_http.find(method) != location->allowed_methods_http.end());
+}
+//construit le path
+static std::string buildFilePath(std::string const& root, std::string const& uri, Location const* location, ServerConfig const& server)
+{
+	std::string relativPath = uri;
+
+	if (location && uri.find(location->path) == 0)
+		relativPath = uri.substr(location->path.size());
+	if (relativPath.empty() || relativPath == "/")
+	{
+		if (location && !location->index.empty())
+			relativPath = "/" + location->index;
+		else if (!server.index.empty())
+			relativPath = "/" + server.index;
+		else
+			relativPath = "/index.html";
+	}
+	return root + relativPath;
+}
+//lire le fichier ce trouvant sur le path crée
+static bool readFileContent(std::string const& filePath, std::string& content)
+{
+	std::ifstream file(filePath.c_str());
+
+	if (!file.is_open())
+		return false;
+	std::ostringstream buffer;
+	buffer << file.rdbuf();
+	content = buffer.str();
+	return true;
+}
+//ecrit dans un fichier
+static bool writeFileContent(std::string const& filePath, std::string const& content)
+{
+	std::ofstream file(filePath.c_str());
+
+	if (!file.is_open())
+		return false;
+	file << content;
+	return true;
+}
+//outil delete
+static bool deleteFile(std::string const& filePath)
+{
+	return (std::remove(filePath.c_str()) == 0);
+}
+//recuperer l'extention
+static std::string getContentType(std::string const& filePath)
+{
+	size_t dotPos = filePath.rfind('.');
+
+	if (dotPos == std::string::npos)
+		return "text/plain";
+
+	std::string extention = filePath.substr(dotPos);
+	if (extention == ".html" || extention == ".htm")
+		return "text/html";
+	if (extention == ".css")
+		return "text/css";
+	if (extention == ".js")
+		return "application/javascript";
+	if (extention == ".jpeg" || extention == ".jpg")
+		return "image/jpeg";
+	if (extention == ".png")
+		return "image/png";
+	if (extention == ".gif")
+		return "image/gif";
+	if (extention == ".txt")
+		return "text/plain";
+	return "application/octet-stream";
+}
+static std::string resolveUploadBase(ServerConfig const& server, Location const* location)
+{
+	if (location && !location->upload_dir.empty())
+		return location->upload_dir;
+	return resolveRoot(server, location);
+}
+static std::string buildUploadPath(ServerConfig const& server, Location const* location)
+{
+	std::string base = resolveUploadBase(server, location);
+	if (!base.empty() && base[base.size() - 1] == '/')
+		return base + "upload.txt";
+	return base + "/upload.txt";
+}
+//verifie si le chemin existe
+static bool pathExists(std::string const& path)
+{
+	struct stat pathStat;
+	return (stat(path.c_str(), &pathStat) == 0);
+}
+//verifie si s'est un dossier
+static bool isDirectory(std::string const& path)
+{
+	struct stat pathStat;
+	if (stat(path.c_str(), &pathStat) != 0)
+		return false;
+	return S_ISDIR(pathStat.st_mode);
+}
+//recuperation de l'index
+static std::string resolveIndex(ServerConfig const& server, Location const* location)
+{
+	if (location && !location->index.empty())
+		return location->index;
+	if (!server.index.empty())
+		return server.index;
+	return "index.html";
+}
+//colle le chemin et le nom du ficher
+static std::string joinPath(std::string const& base, std::string const& extra)
+{
+	if (base.empty())
+		return extra;
+	if (base[base.size() - 1] == '/')
+		return base + extra;
+	return base + "/" + extra;
+}
+//si autoindex est permit
+static bool isAutoIndexEnabled(Location const* location)
+{
+	if (!location)
+		return false;
+	return location->show_directory;
+}
+//une page html simple avec la liste des dossier
+static bool buildDirectoryListing(std::string const& dirPath,
+	std::string const& uri, std::string& html)
+{
+	DIR* dir;
+	struct dirent* entry;
+
+	dir = opendir(dirPath.c_str());
+	if (!dir)
+		return false;
+	html = "<html><body><h1>Index of " + uri + "</h1><ul>";
+	entry = readdir(dir);
+	while (entry)
+	{
+		std::string name = entry->d_name;
+
+		if (name != "." && name != "..")
+		{
+			html += "<li><a href=\"";
+			if (!uri.empty() && uri[uri.size() - 1] == '/')
+				html += uri + name;
+			else
+				html += uri + "/" + name;
+			html += "\">" + name + "</a></li>";
+		}
+		entry = readdir(dir);
+	}
+	html += "</ul></body></html>";
+	closedir(dir);
+	return true;
+}
+//verifie si redirection
+static bool hasRedirect(Location const* location)
+{
+	if (!location)
+		return false;
+	return (location->redirect_page.first != 0
+			&& !location->redirect_page.second.empty());
+}
+// check que le code est bon
+static int resolveRedirectCode(Location const* location)
+{
+	int code = location->redirect_page.first;
+	if (code == 301 || code == 302 || code == 303
+		|| code == 307 || code == 308)
+		return code;
+	return 302;
+}
+//mets la bonne phrase celon le bon code
+static std::string getResolveRedirectPhrase(int code)
+{
+	if (code == 301)
+		return "Moved Permanently";
+	if (code == 302)
+		return "Found";
+	if (code == 303)
+		return "See Other";
+	if (code == 307)
+		return "Temporary Redirect";
+	if (code == 308)
+		return "Permanent Redirect";
+	return "Found";
+}
+//on fait une validation et on met les code d'erreur et les message d'erreur
+HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
+{
+    HttpResponse response;
+	std::string root = resolveRoot(server, location);
+
+	//si pas bonne version
+    if (request.version != "HTTP/1.1")
+    {
+        response.statusCode = 505;
+        response.reasonPhrase = "HTTP Version Not Supported";
+        response.headers["Content-Type"] = "text/plain";
+        response.body = "505 HTTP Version Not Supported\n";
+        return response;
+    }
+
+	//si s'est pas une method que nous supportons
+    if (!isSupportedMethod(request.method))
+	{
+		response.statusCode = 501;
+		response.reasonPhrase = "Not Implemented";
+		response.headers["Content-Type"] = "text/plain";
+		response.body = "501 Not Implemented\n";
+		return response;
+	}
+
+	//si s'est pas une methode que la location permet
+	if (!isMethodAllowed(request.method, location))
+	{
+		response.statusCode = 405;
+		response.reasonPhrase = "Method Not Allowed";
+		response.headers["Content-Type"] = "text/plain";
+		response.body = "405 Method Not Allowed\n";
+		return response;
+	}
+
+	//si le body depasse la taille limite
+	if (!isBodySizeValid(request, server))
+	{
+		response.statusCode = 413;
+		response.reasonPhrase = "Payload Too Large";
+		response.headers["Content-Type"] = "text/plain";
+		response.body = "413 Payload Too Large\n";
+		return response;
+	}
+
+	//si une redirection
+	if (hasRedirect(location))
+	{
+		int code = resolveRedirectCode(location);
+
+		response.statusCode = code;
+		response.reasonPhrase = getResolveRedirectPhrase(code);
+		response.headers["Location"] = location->redirect_page.second;
+		response.headers["Content-Type"] = "text/plain";
+		response.body = "Redirecting to: " + location->redirect_page.second + "\n";
+		return response;
+	}
+
+	//et la on va faire les reponse de chaque methode
+	if (request.method == "GET")
+	{
+		std::string fileContent;
+		std::string filePath = buildFilePath(root, request.uri, location, server);
+
+		if (isDirectory(filePath))
+		{
+			std::string indexPath = joinPath(filePath, resolveIndex(server, location));
+
+			if (readFileContent(indexPath, fileContent))
+			{
+				response.statusCode = 200;
+				response.reasonPhrase = "OK";
+				response.headers["Content-Type"] = getContentType(indexPath);
+				response.body = fileContent;
+				return response;
+			}
+			if (isAutoIndexEnabled(location)
+				&& buildDirectoryListing(filePath, request.uri, fileContent))
+			{
+				response.statusCode = 200;
+				response.reasonPhrase = "OK";
+				response.headers["Content-Type"] = "text/html";
+				response.body = fileContent;
+				return response;
+			}
+			response.statusCode = 403;
+			response.reasonPhrase = "Forbidden";
+			response.headers["Content-Type"] = "text/plain";
+			response.body = "403 Forbidden\n";
+			response.body += "directory listing denied: " + filePath + "\n";
+			return response;
+		}
+		if (!readFileContent(filePath, fileContent))
+		{
+			response.statusCode = 404;
+			response.reasonPhrase = "Not Found";
+			response.headers["Content-Type"] = "text/plain";
+			response.body = "404 Not Found\n";
+			response.body += "file path = " + filePath + "\n";
+			return response;
+		}
+		response.statusCode = 200;
+		response.reasonPhrase = "OK";
+		response.headers["Content-Type"] = getContentType(filePath);
+		response.body = fileContent;
+		return response;
+	}
+
+	if (request.method == "POST")
+	{
+		std::string filePath = buildUploadPath(server, location);
+
+		if (!writeFileContent(filePath, request.body))
+		{
+			response.statusCode = 500;
+			response.reasonPhrase = "Internal Server Error";
+			response.headers["Content-Type"] = "text/plain";
+			response.body = "500 Failed to write file\n";
+			return response;
+		}
+
+		response.statusCode = 201;
+		response.reasonPhrase = "Created";
+		response.headers["Content-Type"] = "text/plain";
+		response.body = "File created at: " + filePath + "\n";
+		return response;
+	}
+	if (request.method == "DELETE")
+	{
+		std::string filePath = buildFilePath(root, request.uri, location, server);
+
+		if (!deleteFile(filePath))
+		{
+			response.statusCode = 404;
+			response.reasonPhrase = "Not Found";
+			response.headers["Content-Type"] = "text/plain";
+			response.body = "404 Not Found\n";
+			response.body += "file path = " + filePath + "\n";
+			return response;
+		}
+		response.statusCode = 200;
+		response.reasonPhrase = "OK";
+		response.headers["Content-Type"] = "text/plain";
+		response.body = "File deleted: " + filePath + "\n";
+		return response;
+	}
+	response.statusCode = 500;
+	response.reasonPhrase = "Internal Server Error";
+	response.headers["Content-Type"] = "text/plain";
+	response.body = "500 Internal Server Error\n";
+	return response;
+}
+#ifndef REQUESTHANDLER_HPP
+#define REQUESTHANDLER_HPP
+
+#include "HttpRequest.hpp"
+#include "HttpResponse.hpp"
+#include "../Parsing/ServerConfig.hpp"
+
+class RequestHandler
+{
+    public:
+        static HttpResponse handleRequest(HttpRequest const&, ServerConfig const&, Location const*);
+};
+
+#endif /* REQUESTHANDLER_HPP */
+#include "HttpParser.hpp"
+#include "RequestHandler.hpp"
+#include "HttpResponseBuilder.hpp"
+#include "../Parsing/ParseConfig.hpp"
+#include <iostream>
+#include <vector>
+
+int main(int argc, char **argv)
+{
+	if (argc != 2)
+	{
+		std::cerr << "Usage: ./webserv_test_http config_file" << std::endl;
+		return 1;
+	}
+
+	std::vector<ServerConfig> servers = parseConfig(argv[1]);
+	if (servers.empty())
+	{
+		std::cerr << "Error: no server config loaded" << std::endl;
+		return 1;
+	}
+
+	ServerConfig const& server = servers[0];
+
+	std::vector<std::string> rawRequests;
+	rawRequests.push_back(
+		"GET /index.html HTTP/1.1\r\n"
+		"Host: localhost:8080\r\n"
+		"\r\n"
+	);
+	rawRequests.push_back(
+		"GET /images/logo.png HTTP/1.1\r\n"
+		"Host: localhost:8080\r\n"
+		"\r\n"
+	);
+	rawRequests.push_back(
+		"POST /upload HTTP/1.1\r\n"
+		"Host: localhost:8080\r\n"
+		"Content-Length: 11\r\n"
+		"\r\n"
+		"hello world"
+	);
+	rawRequests.push_back(
+		"DELETE /images/logo.png HTTP/1.1\r\n"
+		"Host: localhost:8080\r\n"
+		"\r\n"
+	);
+	rawRequests.push_back(
+		"DELETE /upload/upload.txt HTTP/1.1\r\n"
+		"Host: localhost:8080\r\n"
+		"\r\n"
+	);
+
+	for (size_t i = 0; i < rawRequests.size(); ++i)
+	{
+		std::cout << "===== TEST " << i + 1 << " =====" << std::endl;
+
+		try
+		{
+			HttpRequest request = HttpParser::parseRequest(rawRequests[i]);
+			const Location* location = findLocation(server, request.uri);
+
+			HttpResponse response = RequestHandler::handleRequest(request, server, location);
+			std::string rawResponse = HttpResponseBuilder::buildResponse(response);
+
+			std::cout << rawResponse << std::endl;
+		}
+		catch (const std::exception& e)
+		{
+			std::cerr << "Error: " << e.what() << std::endl;
+		}
+
+		std::cout << std::endl;
+	}
+
+	return 0;
+}
+#ifndef LOCATION_HPP
+#define LOCATION_HPP
+
+#include <string>
+#include <set>
+#include <utility> // pour std::pair
+
+struct Location
+{
+	std::string path;
+	std::set<std::string> allowed_methods_http; //pour GET, POST, DELETE
+	std::string root; //chemin dossier racine
+	std::string index; //fichier index par defaut
+	bool show_directory; //affiche la liste des fichiers , si pas index 
+	std::string upload_dir; //dossier pour les fichiers uploades
+	std::pair <int, std::string> redirect_page; //code redirection + url redirection
+	std::set <std::string> cgi_extensions; //lquel CGI est active .py ou .php par exemple
+
+	Location() : show_directory(false), redirect_page(std::make_pair(0, "")) {} //CPP 98
+};
+
+#endif 
+#include "ParseConfig.hpp"
+#include <fstream> //permet de lire le fichier de config
+#include <iostream>
+#include <sstream> //permet de lire le contenu du configfile ligne par ligne
+
+
+std::string stripSemicolon(const std::string& s) //pour enlever le ; a la fin de chaque ligne
+{
+    return s.substr(0, s.find(";"));
+}
+
+std::vector<ServerConfig> parseConfig(std::string path)
+{
+    std::ifstream configFile(path.c_str()); //ouvrir le fichier de config
+    if (!configFile.is_open())
+    {
+        std::cerr << "Error opening config file " << path << std::endl;
+        return std::vector<ServerConfig>();
+    } 
+
+    std::string content((std::istreambuf_iterator<char>(configFile)), std::istreambuf_iterator<char>()); //lire le contenu du fichier de config
+    if (content.empty())
+    {
+        std::cerr << "config file is empty" << std::endl;
+        return std::vector<ServerConfig>();
+    }
+
+    std::istringstream stream(content);
+    std::string line;
+    std::vector<ServerConfig> serverlist;
+
+    while (std::getline(stream, line))
+    {
+        if (line.find("server") != std::string::npos)
+        {
+            ServerConfig server;
+            if (!parseServer(stream, server))
+                return std::vector<ServerConfig>();
+            serverlist.push_back(server);
+        }
+    }
+    return serverlist;
+}
+
+//A FAIRE : ajouter des verifications d'erreur pour chaque parseur de serveur
+//(ex: verifier que le port est un nombre valide, que la taille maximale du corps de la requete est un nombre valide, etc...)
+
+
+/*
+
+c++ -Wall -Wextra -Werror -std=c++98 main.cpp ParseConfig.cpp ParseServer.cpp ParseLocation.cpp -o webserv
+
+*/
+#ifndef PARSECONFIG_HPP
+#define PARSECONFIG_HPP
+
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include "ServerConfig.hpp"
+
+std::string stripSemicolon(const std::string& s);
+std::vector<ServerConfig> parseConfig(std::string path);
+bool parseServer(std::istringstream& stream, ServerConfig& server);
+bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, ServerConfig& server);
+
+#endif
+#include "ParseConfig.hpp"
+#include <iostream> //on en aura besoin pour afficher les erreurs et infos (cerr et cout)
+
+static bool parseLocation_Root(std::istringstream& locationStream, Location& location) //parse le root (uri du dossier racine)
+{
+    std::string root_path;
+    locationStream >> root_path;
+    location.root = stripSemicolon(root_path);
+    return true;
+}
+
+static bool parseLocation_Index(std::istringstream& locationStream, Location& location) //parse l'index (fichier index)
+{
+    std::string index_file;
+    locationStream >> index_file;
+    location.index = stripSemicolon(index_file);
+    return true;
+}
+
+static bool parseLocation_Methods(std::istringstream& locationStream, Location& location) //parse les methodes GET, POST, DELETE
+{
+    std::string method;
+    while (locationStream >> method)
+    {
+        method = stripSemicolon(method);
+        location.allowed_methods_http.insert(method);
+        if (method[method.size() - 1] == ';')
+            break;
+    }
+    return true;
+}
+
+static bool parseLocation_ShowDirectory(std::istringstream& locationStream, Location& location) //(true ou false) afficher la liste des fichiers du dossier racine si pas d'index
+{
+    std::string show_directory_str;
+    locationStream >> show_directory_str;
+    show_directory_str = stripSemicolon(show_directory_str);
+    if (show_directory_str == "true")
+        location.show_directory = true;
+    else if (show_directory_str == "false")
+        location.show_directory = false;
+    //verifier if ERROR
+    return true;
+}
+
+static bool parseLocation_UploadDir(std::istringstream& locationStream, Location& location) // parse le dossier de upload des fichiers  (uri du dossier upload)
+{
+    std::string upload_dir;
+    locationStream >> upload_dir;
+    location.upload_dir = stripSemicolon(upload_dir);
+    return true;
+}
+
+static bool parseLocation_RedirectPage(std::istringstream& locationStream, Location& location) //parse la page de redirection (code HTTP et URL)
+{
+    std::string code_str, url_str;
+    locationStream >> code_str >> url_str;
+    code_str = stripSemicolon(code_str);
+    url_str  = stripSemicolon(url_str);
+    std::istringstream in_string_stream(code_str);
+    int code;
+    in_string_stream >> code;
+    //verifier if ERROR
+    location.redirect_page = std::make_pair(code, url_str);
+    return true;
+}
+
+static bool parseLocation_CgiExtensions(std::istringstream& locationStream, Location& location) //parser les extensions de fichiers pour lesquelles le CGI est actif (ex: .py ou .php)
+{
+    std::string cgi_extension;
+    while (locationStream >> cgi_extension)
+    {
+        cgi_extension = stripSemicolon(cgi_extension);
+        location.cgi_extensions.insert(cgi_extension);
+        if (cgi_extension[cgi_extension.size() - 1] == ';')
+            break;
+    }
+    return true;
+}
+
+bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, ServerConfig& server) //parse une location et l'ajoute a la liste des locations du serveur
+{
+    Location location;
+    lineStream >> location.path;
+
+    std::string locationLine;
+    while (std::getline(stream, locationLine)) //lire le contenu de la location ligne par ligne
+    {
+        if (locationLine.find("}") != std::string::npos)
+            break;
+        std::istringstream locationStream(locationLine); //créer un flux pour lire la ligne de la location
+        std::string location_word;
+        locationStream >> location_word;
+
+        if      (location_word == "root")
+		{
+			if (!parseLocation_Root(locationStream, location))
+				return false;
+		}
+        else if (location_word == "index")
+		{
+			if (!parseLocation_Index(locationStream, location))
+				return false;
+		}
+        else if (location_word == "methods")
+		{
+			if (!parseLocation_Methods(locationStream, location))
+				return false;
+		}
+        else if (location_word == "show_directory")
+		{
+			if (!parseLocation_ShowDirectory(locationStream, location))
+				return false;
+		}
+        else if (location_word == "upload_dir")
+		{
+			if (!parseLocation_UploadDir(locationStream, location))
+				return false;
+		}
+        else if (location_word == "redirect_page")
+		{
+			if (!parseLocation_RedirectPage(locationStream, location))
+				return false;
+		}
+        else if (location_word == "cgi_extensions")
+		{
+			if (!parseLocation_CgiExtensions(locationStream, location))
+				return false;
+		}
+    }
+    server.locations.push_back(location); //ajouter la location a la liste des locations du serveur
+    return true;
+}
+
+//A FAIRE : ajouter des verifications d'erreur pour chaque parseur de location
+//(ex: verifier que le code de redirection est un nombre valide, que les methodes sont valides, etc...)
+
+
+#include "ParseConfig.hpp"
+#include <iostream> //on en aura besoin pour afficher les erreurs et infos (cerr et cout)
+
+bool parseServer_Listen(std::istringstream& lineStream, ServerConfig& server) //parse le port d'ecoute du serveur et l'ajoute a la liste des ports d'ecoute du serveur
+{
+    std::string port_str;
+    lineStream >> port_str;
+    port_str = port_str.substr(0, port_str.find(";"));
+    std::istringstream in_string_stream(port_str);
+    unsigned int port;
+    in_string_stream >> port;
+	//verifier if ERROR 
+    server.listen_ports.insert(port);
+    return true;
+}
+
+static bool parseServer_Root(std::istringstream& lineStream, ServerConfig& server) //parse le root (uri du dossier racine) du serveur
+{
+    std::string root_path;
+    lineStream >> root_path;
+    server.root = stripSemicolon(root_path);
+    return true;
+}
+
+static bool parseServer_DomainName(std::istringstream& lineStream, ServerConfig& server) //parse les noms de domaine du serveur et les ajoute a la liste des noms de domaine du serveur
+{
+    std::string domain_name;
+    lineStream >> domain_name;
+    server.domain_names.insert(stripSemicolon(domain_name));
+    return true;
+}
+
+static bool parseServer_Index(std::istringstream& lineStream, ServerConfig& server) //parse l'index (fichier index) du serveur
+{
+    std::string index_file;
+    lineStream >> index_file;
+    server.index = stripSemicolon(index_file);
+    return true;
+}
+
+//parse les pages d'erreur du serveur (code d'erreur et chemin de la page d'erreur) et les ajoute a la map des pages d'erreur du serveur
+static bool parseServer_ErrorPage(std::istringstream& lineStream, ServerConfig& server) 
+{
+    std::string code_error_str, path_error;
+    lineStream >> code_error_str >> path_error;
+    code_error_str = stripSemicolon(code_error_str);
+    path_error = stripSemicolon(path_error);
+    std::istringstream in_string_stream(code_error_str);
+    int code_error;
+    in_string_stream >> code_error;
+	//verifier if ERROR
+    server.error_pages[code_error] = path_error;
+    return true;
+}
+
+static bool parseServer_ClientMaxBodySize(std::istringstream& lineStream, ServerConfig& server) //parse la taille maximale du corps requête client et l'ajoute au serveur
+{
+    std::string size_str;
+    lineStream >> size_str;
+    size_str = stripSemicolon(size_str);
+    std::istringstream in_string_stream(size_str);
+    unsigned int size;
+    in_string_stream >> size;
+	//verifier if ERROR
+    server.client_max_body_size = size;
+    return true;
+}
+
+
+bool parseServer(std::istringstream& stream, ServerConfig& server) //parse un serveur et l'ajoute a la liste des serveurs
+{
+    std::string serverLine;
+    while (std::getline(stream, serverLine))
+    {
+        if (serverLine.find("}") != std::string::npos) //fin du serveur
+            break;
+        std::istringstream lineStream(serverLine);
+        std::string word_to_parse;
+        lineStream >> word_to_parse;
+
+        if      (word_to_parse == "listen")               
+        { 
+            if (!parseServer_Listen(lineStream, server))
+                return false; 
+        }
+        else if (word_to_parse == "root")
+		{
+			if (!parseServer_Root(lineStream, server))
+				return false; 
+		}
+        else if (word_to_parse == "domain_name")
+		{
+			if (!parseServer_DomainName(lineStream, server))
+				return false; 
+		}
+        else if (word_to_parse == "index")
+		{
+			if (!parseServer_Index(lineStream, server))
+				return false; 
+		}
+        else if (word_to_parse == "error_page")
+		{
+			if (!parseServer_ErrorPage(lineStream, server))
+				return false; 
+		}
+        else if (word_to_parse == "client_max_body_size") //pour parser la taille maximalede la requête client et l'ajouter au serveur
+		{
+			if (!parseServer_ClientMaxBodySize(lineStream, server))
+				return false; 
+		}
+        else if (word_to_parse == "location")
+		{
+			if (!parseLocation(lineStream, stream, server))
+				return false; 
+		}
+    }
+    return true;
+}
+
+//A FAIRE : ajouter des verifications d'erreur pour chaque parseur 
+//(ex: verifier que le port est un nombre valide, que la taille maximale du corps de la requete est un nombre valide, etc...)
+#ifndef SERVERCONFIG_HPP
+#define SERVERCONFIG_HPP
+
+#include <string>
+#include <set>
+#include <map>
+#include <vector>
+#include "Location.hpp"
+
+struct ServerConfig
+{
+	std::set<unsigned int> listen_ports; //ports d'ecoute
+	std::set<std::string> domain_names; //noms de domaine
+	std::string root; //chemin dossier racine
+	std::string index; //fichier index par defaut
+	std::map<int, std::string> error_pages; //code d'erreur + chemin (page 404 par exemple)
+	unsigned int client_max_body_size; //taille max du corps de la requete
+	std::vector <Location> locations; //liste des locations pour ce serveur
+
+	ServerConfig() : client_max_body_size(0) {} //CPP 98
+};
+
+#endif 
+#include <iostream>
+#include "ParseConfig.hpp"
+
+void print_parse_location(Location const &loc, size_t j) //affiche les informations d'une location  (loc = location a afficher, j = numero de la location dans la liste)
+{
+    std::cout << "  - Location " << j << std::endl;
+    std::cout << "  - path: " << loc.path << std::endl;
+    std::cout << "  - root: " << loc.root << std::endl;
+    std::cout << "  - methods: ";
+    for (std::set<std::string>::const_iterator iter = loc.allowed_methods_http.begin(); //affiche les methodes autorisees pour cette location
+         iter != loc.allowed_methods_http.end(); ++iter)
+        std::cout << *iter << " ";
+    std::cout << std::endl;
+    std::cout << "  - index: " << loc.index << std::endl;
+    std::cout << "  - show_directory: " << loc.show_directory << std::endl;
+    std::cout << "  - upload_dir: " << loc.upload_dir << std::endl;
+    std::cout << "  - redirect_page: " << loc.redirect_page.first << " " << loc.redirect_page.second << std::endl;
+    std::cout << "  - cgi_extensions: ";
+    for (std::set<std::string>::const_iterator iter = loc.cgi_extensions.begin(); //affiche les extensions CGI pour cette location
+         iter != loc.cgi_extensions.end(); ++iter)
+        std::cout << *iter << " ";
+    std::cout << std::endl;
+}
+
+void print_parse_server(ServerConfig const &server, size_t i)
+{ //affiche les informations d'un serveur (server = serveur a afficher, i = numero du serveur dans la liste)
+    std::cout << "Server n° " << i << std::endl;
+    std::cout << "root  " << server.root << std::endl;
+    std::cout << "domain_names ";
+    for (std::set<std::string>::const_iterator iter = server.domain_names.begin();
+         iter != server.domain_names.end(); ++iter)
+        std::cout << *iter << " ";
+    std::cout << std::endl;
+    std::cout << "ports ";
+    for (std::set<unsigned int>::const_iterator iter = server.listen_ports.begin();
+         iter != server.listen_ports.end(); ++iter)
+        std::cout << *iter << " ";
+    std::cout << std::endl;
+    std::cout << "index: " << server.index << std::endl;
+    std::cout << "client_max_body_size: " << server.client_max_body_size << std::endl;
+    for (std::map<int, std::string>::const_iterator iter = server.error_pages.begin(); //affiche les pages d'erreur du serveur (code d'erreur et chemin de la page d'erreur)
+         iter != server.error_pages.end(); ++iter)
+        std::cout << "error_page: " << iter->first << " " << iter->second << std::endl;
+    for (size_t j = 0; j < server.locations.size(); j++)
+        print_parse_location(server.locations[j], j);
+}
+
+void printServers(std::vector<ServerConfig> servers) //affiche les informations de tous les serveurs (servers = liste des serveurs a afficher)
+{
+    std::cout << "nb de servers: " << servers.size() << std::endl;
+    for (size_t i = 0; i < servers.size(); ++i)
+        print_parse_server(servers[i], i);
+}
+
+int main(int argc, char **argv)
+{
+    if (argc != 2)
+    {
+        std::cerr << " ./webserv configfile_path" << std::endl;
+        return 1;
+    }
+    std::vector<ServerConfig> servers = parseConfig(argv[1]);
+    printServers(servers);
+    return 0;
+}
+#pragma once
+//====================(COLORS)==============================//
+
+// Réinitialisation
+# define RESET       "\033[0m"
+
+// Couleurs de texte
+# define BLACK       "\033[30m"
+# define RED         "\033[31m"
+# define GREEN       "\033[32m"
+# define YELLOW      "\033[33m"
+# define BLUE        "\033[34m"
+# define MAGENTA     "\033[35m"
+# define CYAN        "\033[36m"
+# define WHITE       "\033[37m"
+
+// Couleurs de fond
+# define BG_BLACK    "\033[40m"
+# define BG_RED      "\033[41m"
+# define BG_GREEN    "\033[42m"
+# define BG_YELLOW   "\033[43m"
+# define BG_BLUE     "\033[44m"
+# define BG_MAGENTA  "\033[45m"
+# define BG_CYAN     "\033[46m"
+# define BG_WHITE    "\033[47m"
+
+// Styles
+# define BOLD        "\033[1m"
+# define UNDERLINE   "\033[4m"
+# define BLINK       "\033[5m"
+
+
+# define ERROR       RED "Error: " RESET
+# ifndef D
+	#define D 0
+#endif
+
+# define BDEBUG      BLUE "Debug: " RESET
+# define EDEBUG      (D ? "\n" : "\r\33[2K")
+
+#include "webserv.hpp"
+
+
+int main(int ac, char **av)
+{
+	if (ac != 2)
+	{
+		std::cerr << "Usage: " << av[0] << " <config>" << std::endl;
+		return (1);
+	}
+
+	std::vector<ServerConfig> configs = parseConfig(av[1]);
+	std::vector<Server> servers;
+
+	for (size_t i = 0; i < configs.size(); i++)
+	{
+		Server s(configs[i]);
+		if (s.start() != SUCCESS)
+			return (FAIL);
+		servers.push_back(s);
+	}
+
+	// loop(servers); //will need to fork to handle multiple servers
+	return (servers[0].loop());
+}
+#include "webserv.hpp"
+
+int error(std::string s)
+{
+	std::cerr << ERROR << s << std::endl;
+	perror(s.c_str());
+	return (FAIL);
+}
+
+Server::Server(ServerConfig serv)
+{
+	_host = "127.0.0.1";
+	_ports = serv.listen_ports; //ports d'ecoute
+	_domainNames = serv.domain_names; //noms de domaine
+	_root = serv.root; //chemin dossier racine
+	_index = serv.index; //fichier index par defaut
+	_errorPages = serv.error_pages; //code d'erreur + chemin (page 404 par exemple)
+	_clientMaxBodySize = serv.client_max_body_size; //taille max du corps de la requete
+	_locations = serv.locations; //liste des locations pour ce serveur
+	// _pollFds; // structs de poll
+	// _listenFds; // un fd par port après socket()+bind()+listen()
+	_autoindex = false;
+}
+
+Server::~Server()
+{
+	//deletes?
+}
+
+int Server::start(void)
+{
+	for (std::set<unsigned int>::iterator it = _ports.begin(); it != _ports.end(); ++it)
+	{
+		int fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (fd == -1)
+			return (error("Socket returned -1"));
+		int opt = 1;
+		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+		fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+
+		struct sockaddr_in addr;
+		memset(&addr, 0, sizeof(addr));
+		addr.sin_family	  = AF_INET;
+		addr.sin_port		= htons(*it);
+		addr.sin_addr.s_addr = inet_addr(_host.c_str());
+
+		if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
+			return (error("Bind returned -1"));
+		if (listen(fd, SOMAXCONN) == -1)
+			return (error("Listen returned -1"));
+
+		_listenFds.push_back(fd);
+		struct pollfd pfd = {fd, POLLIN, 0};
+		_pollFds.push_back(pfd);
+	}
+	return (SUCCESS);
+}
+
+int Server::loop(void)
+{
+	while (true)
+	{
+		int nReady = poll(_pollFds.data(), _pollFds.size(), -1); // wait for events
+		if (nReady < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			throw std::runtime_error("poll() failed");
+		}
+		size_t size = _pollFds.size();
+
+		for (size_t i = 0; i < size; i++)
+		{
+			if (_pollFds[i].revents == 0)
+				continue; // Rien sur le fd
+			int fd = _pollFds[i].fd;
+			// ── Cas 1 : Erreur ou déconnexion ─────────────────────────
+			if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
+			{
+				// close_client(fd);
+				;
+				continue;
+			}
+			// ── Cas 2 : Socket d'écoute → nouvelle connexion ──────────
+			// if (is_listen_fd(fd) && (_pollFds[i].revents & POLLIN))
+			// {
+				// accept_new_client(fd);
+				// continue;
+			// }
+			// ── Cas 3 : Socket client → lecture ───────────────────────
+			if (_pollFds[i].revents & POLLIN)
+			{
+				// read_from_client(fd);
+				;
+			}
+
+			// ── Cas 4 : Socket client → écriture ──────────────────────
+			if (_pollFds[i].revents & POLLOUT)
+			{
+				// write_to_client(fd);
+				;
+			}
+			(void)fd;
+		}
+
+		// ─── Phase 3 : Nettoyage des fds marqués ───────────────────────
+		// cleanup_closed_fds();
+
+	}
+	return (SUCCESS);
+}
+
+#include <poll.h>
+/*
+#include <vector>
+int poll_loop()
+{
+	std::vector<struct pollfd> fds;
+	
+	// Ajouter le socket d'écoute
+	struct pollfd listen_pfd;
+	listen_pfd.fd	 = listen_fd;
+	listen_pfd.events = POLLIN;   // On veut savoir quand une connexion arrive
+	fds.push_back(listen_pfd);
+	
+	// Boucle principale
+	while (true) {
+		int ret = poll(fds.data(), fds.size(), 5000); // Timeout 5s
+	
+		if (ret == -1) {
+			if (errno == EINTR) continue; // Signal, on relance
+			perror("poll"); break;
+		}
+		if (ret == 0) continue; // Timeout, rien à faire
+	
+		for (size_t i = 0; i < fds.size(); ++i) {
+			if (fds[i].revents == 0) continue; // Ce fd n'a rien
+	
+			if (fds[i].fd == listen_fd) {
+				// Nouvelle connexion entrante
+				handle_new_connection(listen_fd, fds);
+			} else {
+				// Activité sur un fd client
+				handle_client(fds[i], fds, i);
+			}
+		}
+	}
+}
+
+void add_to_poll(std::vector<struct pollfd>& fds, int fd, short events) {
+	struct pollfd pfd;
+	pfd.fd	  = fd;
+	pfd.events  = events;
+	pfd.revents = 0;
+	fds.push_back(pfd);
+}
+
+// Retirer un fd (important: ne pas invalider les index en cours d'itération)
+void remove_from_poll(std::vector<struct pollfd>& fds, int fd) {
+	for (size_t i = 0; i < fds.size(); ++i) {
+		if (fds[i].fd == fd) {
+			fds.erase(fds.begin() + i);
+			return;
+		}
+	}
+}
+
+*/
+#pragma once
+
+//====================(INCLUDES)============================//
+#include <iostream>
+#include <sys/socket.h>
+#include <poll.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <poll.h>
+#include <cstring>
+
+#include "colors.hpp"
+#include "../Parsing/Location.hpp"
+#include "../Parsing/ParseConfig.hpp"
+
+
+//====================(DEFINES)=============================//
+# define SUCCESS 1
+# define FAIL 0
+
+//====================(STRUCTS)=============================//
+// client
+struct Client {
+	int		 fd;
+	std::string read_buf;   // recieve
+	std::string write_buf;  // to send
+	// others : adresse IP, config serveur associée, etc
+};
+
+//====================(DECLARATIONS)========================//
+
+class Server
+{
+	private:
+		std::string	 _host; 
+		std::set<unsigned int> _ports; //ports d'ecoute
+		std::set<std::string> _domainNames; //noms de domaine
+		std::string _root; //chemin dossier racine
+		std::string _index; //fichier index par defaut
+		std::map<int, std::string> _errorPages; //code d'erreur + chemin (page 404 par exemple)
+		unsigned int _clientMaxBodySize; //taille max du corps de la requete
+		std::vector <Location> _locations; //liste des locations pour ce serveur
+		std::vector<struct pollfd> _pollFds; // struct de poll
+		std::vector<int> _listenFds; // un fd par port après socket()+bind()+listen()
+		bool _autoindex; // false par défaut
+
+	public:
+		Server(ServerConfig serv);
+		~Server();
+		int start(void);
+		int loop(void);
+};
+
+
+//============(PRINCIPAL)================//
+//main loop
+int loop(std::vector<ServerConfig> servers);
+int poll_loop();
+
+//============(UTILS)====================//
+
+//clear
+
+//debug
+
