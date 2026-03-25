@@ -34,7 +34,7 @@ static bool isMethodAllowed(std::string const& method, Location const* location)
 		return true;
 	return (location->allowed_methods_http.find(method) != location->allowed_methods_http.end());
 }
-//construit le path 
+//construit le path
 static std::string buildFilePath(std::string const& root, std::string const& uri, Location const* location, ServerConfig const& server)
 {
 	std::string relativPath = uri;
@@ -187,6 +187,38 @@ static bool buildDirectoryListing(std::string const& dirPath,
 	closedir(dir);
 	return true;
 }
+//verifie si redirection
+static bool hasRedirect(Location const* location)
+{
+	if (!location)
+		return false;
+	return (location->redirect_page.first != 0
+			&& !location->redirect_page.second.empty());
+}
+// check que le code est bon
+static int resolveRedirectCode(Location const* location)
+{
+	int code = location->redirect_page.first;
+	if (code == 301 || code == 302 || code == 303
+		|| code == 307 || code == 308)
+		return code;
+	return 302;
+}
+//mets la bonne phrase celon le bon code
+static std::string getResolveRedirectPhrase(int code)
+{
+	if (code == 301)
+		return "Moved Permanently";
+	if (code == 302)
+		return "Found";
+	if (code == 303)
+		return "See Other";
+	if (code == 307)
+		return "Temporary Redirect";
+	if (code == 308)
+		return "Permanent Redirect";
+	return "Found";
+}
 //on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
 {
@@ -233,6 +265,19 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		return response;
 	}
 
+	//si une redirection
+	if (hasRedirect(location))
+	{
+		int code = resolveRedirectCode(location);
+
+		response.statusCode = code;
+		response.reasonPhrase = getResolveRedirectPhrase(code);
+		response.headers["Location"] = location->redirect_page.second;
+		response.headers["Content-Type"] = "text/plain";
+		response.body = "Redirecting to: " + location->redirect_page.second + "\n";
+		return response;
+	}
+
 	//et la on va faire les reponse de chaque methode
 	if (request.method == "GET")
 	{
@@ -267,12 +312,21 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 			response.body += "directory listing denied: " + filePath + "\n";
 			return response;
 		}
-		if (!readFileContent(filePath, fileContent))
+		if (!pathExists(filePath))
 		{
 			response.statusCode = 404;
 			response.reasonPhrase = "Not Found";
 			response.headers["Content-Type"] = "text/plain";
 			response.body = "404 Not Found\n";
+			response.body += "file path = " + filePath + "\n";
+			return response;
+		}
+		if (!readFileContent(filePath, fileContent))
+		{
+			response.statusCode = 403;
+			response.reasonPhrase = "Forbidden";
+			response.headers["Content-Type"] = "text/plain";
+			response.body = "403 Forbidden\n";
 			response.body += "file path = " + filePath + "\n";
 			return response;
 		}
@@ -315,7 +369,6 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 			response.body += "file path = " + filePath + "\n";
 			return response;
 		}
-
 		response.statusCode = 200;
 		response.reasonPhrase = "OK";
 		response.headers["Content-Type"] = "text/plain";
