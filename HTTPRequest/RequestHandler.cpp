@@ -3,6 +3,8 @@
 #include <fstream>
 #include <string>
 #include <cstdio>
+#include <sys/stat.h>
+#include <dirent.h>
 
 //petit check de la taile du body
 static bool isBodySizeValid(HttpRequest const& request, ServerConfig const& server)
@@ -32,7 +34,7 @@ static bool isMethodAllowed(std::string const& method, Location const* location)
 		return true;
 	return (location->allowed_methods_http.find(method) != location->allowed_methods_http.end());
 }
-//construit le path 
+//construit le path
 static std::string buildFilePath(std::string const& root, std::string const& uri, Location const* location, ServerConfig const& server)
 {
 	std::string relativPath = uri;
@@ -50,28 +52,6 @@ static std::string buildFilePath(std::string const& root, std::string const& uri
 	}
 	return root + relativPath;
 }
-
-// TODO:
-// Cette fonction utilise directement l'URI pour construire un chemin filesystem,
-// ce qui pose plusieurs problèmes critiques:
-//
-// 1. Query string:
-//    L'URI peut contenir "?...", qui ne doit pas être utilisé pour accéder au fichier.
-//    Il faut utiliser uniquement le path.
-//
-// 2. Sécurité:
-//    Aucune protection contre les attaques de type "../" (directory traversal).
-//    Exemple: GET /../../etc/passwd
-//    Il faut normaliser ou refuser ce type de chemin.
-//
-// 3. Mapping direct URI -> filesystem:
-//    Ce mapping est trop naïf.
-//    Il faut s'assurer que le chemin final reste bien dans le root configuré.
-//
-// Sans ces protections, le serveur est vulnérable et incorrect.
-//nico 
-
-
 //lire le fichier ce trouvant sur le path crée
 static bool readFileContent(std::string const& filePath, std::string& content)
 {
@@ -124,6 +104,121 @@ static std::string getContentType(std::string const& filePath)
 		return "text/plain";
 	return "application/octet-stream";
 }
+static std::string resolveUploadBase(ServerConfig const& server, Location const* location)
+{
+	if (location && !location->upload_dir.empty())
+		return location->upload_dir;
+	return resolveRoot(server, location);
+}
+static std::string buildUploadPath(ServerConfig const& server, Location const* location)
+{
+	std::string base = resolveUploadBase(server, location);
+	if (!base.empty() && base[base.size() - 1] == '/')
+		return base + "upload.txt";
+	return base + "/upload.txt";
+}
+//verifie si le chemin existe
+static bool pathExists(std::string const& path)
+{
+	struct stat pathStat;
+	return (stat(path.c_str(), &pathStat) == 0);
+}
+//verifie si s'est un dossier
+static bool isDirectory(std::string const& path)
+{
+	struct stat pathStat;
+	if (stat(path.c_str(), &pathStat) != 0)
+		return false;
+	return S_ISDIR(pathStat.st_mode);
+}
+//recuperation de l'index
+static std::string resolveIndex(ServerConfig const& server, Location const* location)
+{
+	if (location && !location->index.empty())
+		return location->index;
+	if (!server.index.empty())
+		return server.index;
+	return "index.html";
+}
+//colle le chemin et le nom du ficher
+static std::string joinPath(std::string const& base, std::string const& extra)
+{
+	if (base.empty())
+		return extra;
+	if (base[base.size() - 1] == '/')
+		return base + extra;
+	return base + "/" + extra;
+}
+//si autoindex est permit
+static bool isAutoIndexEnabled(Location const* location)
+{
+	if (!location)
+		return false;
+	return location->show_directory;
+}
+//une page html simple avec la liste des dossier
+static bool buildDirectoryListing(std::string const& dirPath,
+	std::string const& uri, std::string& html)
+{
+	DIR* dir;
+	struct dirent* entry;
+
+	dir = opendir(dirPath.c_str());
+	if (!dir)
+		return false;
+	html = "<html><body><h1>Index of " + uri + "</h1><ul>";
+	entry = readdir(dir);
+	while (entry)
+	{
+		std::string name = entry->d_name;
+
+		if (name != "." && name != "..")
+		{
+			html += "<li><a href=\"";
+			if (!uri.empty() && uri[uri.size() - 1] == '/')
+				html += uri + name;
+			else
+				html += uri + "/" + name;
+			html += "\">" + name + "</a></li>";
+		}
+		entry = readdir(dir);
+	}
+	html += "</ul></body></html>";
+	closedir(dir);
+	return true;
+}
+//verifie si redirection
+static bool hasRedirect(Location const* location)
+{
+	if (!location)
+		return false;
+	return (location->redirect_page.first != 0
+			&& !location->redirect_page.second.empty());
+}
+// check que le code est bon
+static int resolveRedirectCode(Location const* location)
+{
+	int code = location->redirect_page.first;
+	if (code == 301 || code == 302 || code == 303
+		|| code == 307 || code == 308)
+		return code;
+	return 302;
+}
+//mets la bonne phrase celon le bon code
+static std::string getResolveRedirectPhrase(int code)
+{
+	if (code == 301)
+		return "Moved Permanently";
+	if (code == 302)
+		return "Found";
+	if (code == 303)
+		return "See Other";
+	if (code == 307)
+		return "Temporary Redirect";
+	if (code == 308)
+		return "Permanent Redirect";
+	return "Found";
+}
 //on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
 {
@@ -170,13 +265,54 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		return response;
 	}
 
+	//si une redirection
+	if (hasRedirect(location))
+	{
+		int code = resolveRedirectCode(location);
+
+		response.statusCode = code;
+		response.reasonPhrase = getResolveRedirectPhrase(code);
+		response.headers["Location"] = location->redirect_page.second;
+		response.headers["Content-Type"] = "text/plain";
+		response.body = "Redirecting to: " + location->redirect_page.second + "\n";
+		return response;
+	}
+
 	//et la on va faire les reponse de chaque methode
 	if (request.method == "GET")
 	{
 		std::string fileContent;
 		std::string filePath = buildFilePath(root, request.uri, location, server);
 
-		if (!readFileContent(filePath, fileContent))
+		if (isDirectory(filePath))
+		{
+			std::string indexPath = joinPath(filePath, resolveIndex(server, location));
+
+			if (readFileContent(indexPath, fileContent))
+			{
+				response.statusCode = 200;
+				response.reasonPhrase = "OK";
+				response.headers["Content-Type"] = getContentType(indexPath);
+				response.body = fileContent;
+				return response;
+			}
+			if (isAutoIndexEnabled(location)
+				&& buildDirectoryListing(filePath, request.uri, fileContent))
+			{
+				response.statusCode = 200;
+				response.reasonPhrase = "OK";
+				response.headers["Content-Type"] = "text/html";
+				response.body = fileContent;
+				return response;
+			}
+			response.statusCode = 403;
+			response.reasonPhrase = "Forbidden";
+			response.headers["Content-Type"] = "text/plain";
+			response.body = "403 Forbidden\n";
+			response.body += "directory listing denied: " + filePath + "\n";
+			return response;
+		}
+		if (!pathExists(filePath))
 		{
 			response.statusCode = 404;
 			response.reasonPhrase = "Not Found";
@@ -185,7 +321,15 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 			response.body += "file path = " + filePath + "\n";
 			return response;
 		}
-
+		if (!readFileContent(filePath, fileContent))
+		{
+			response.statusCode = 403;
+			response.reasonPhrase = "Forbidden";
+			response.headers["Content-Type"] = "text/plain";
+			response.body = "403 Forbidden\n";
+			response.body += "file path = " + filePath + "\n";
+			return response;
+		}
 		response.statusCode = 200;
 		response.reasonPhrase = "OK";
 		response.headers["Content-Type"] = getContentType(filePath);
@@ -195,7 +339,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 
 	if (request.method == "POST")
 	{
-		std::string filePath = root + "/upload.txt";
+		std::string filePath = buildUploadPath(server, location);
 
 		if (!writeFileContent(filePath, request.body))
 		{
@@ -212,17 +356,6 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		response.body = "File created at: " + filePath + "\n";
 		return response;
 	}
-	// TODO:
-// Le chemin de sortie est actuellement hardcodé:
-//     root + "/upload.txt"
-//
-// Il faut:
-//   - utiliser location->upload_dir si défini
-//   - éventuellement utiliser un nom dynamique (ex: timestamp, nom envoyé, etc.)
-//
-// Sinon, toutes les requêtes POST écrasent le même fichier, ce qui est incorrect.
-//nico
-
 	if (request.method == "DELETE")
 	{
 		std::string filePath = buildFilePath(root, request.uri, location, server);
@@ -236,7 +369,6 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 			response.body += "file path = " + filePath + "\n";
 			return response;
 		}
-
 		response.statusCode = 200;
 		response.reasonPhrase = "OK";
 		response.headers["Content-Type"] = "text/plain";
@@ -249,39 +381,3 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 	response.body = "500 Internal Server Error\n";
 	return response;
 }
-
-// TODO:
-// Cette fonction n'utilise pas encore pleinement la configuration issue de ServerConfig et Location.
-//
-// Problèmes actuels:
-//
-// 1. error_pages:
-//    Les pages d'erreur configurées dans server.error_pages ne sont jamais utilisées.
-//    Il faut servir les fichiers d'erreur personnalisés si définis.
-//
-// 2. upload_dir:
-//    Les requêtes POST écrivent toujours dans "root/upload.txt".
-//    Il faut utiliser location->upload_dir si défini.
-//
-// 3. redirect_page:
-//    Les redirections configurées (code + URL) ne sont pas gérées.
-//    Il faut détecter et retourner une réponse 3xx avec header Location.
-//
-// 4. show_directory:
-//    Si aucun index n'est trouvé et show_directory == true,
-//    il faut générer un listing du dossier.
-//
-// 5. cgi_extensions:
-//    Les extensions CGI sont parsées mais jamais utilisées.
-//    Il faudra détecter ces fichiers et les exécuter via CGI.
-//
-// 6. HTTP logique:
-//    Certaines erreurs devraient être plus fines:
-//      - 400 (Bad Request)
-//      - 403 (Forbidden)
-//      - 404 (Not Found)
-//    Actuellement tout est simplifié.
-//
-// Conclusion:
-//    La config est bien parsée mais pas encore réellement appliquée ici.
-//nico
