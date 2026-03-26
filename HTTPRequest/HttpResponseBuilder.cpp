@@ -16,3 +16,14 @@ std::string HttpResponseBuilder::buildResponse(HttpResponse const& response)
     out << response.body;
     return out.str();
 }
+
+// TODO:
+// Le header Content-Length est ajouté systématiquement,
+// même si l'utilisateur l'a déjà défini dans response.headers.
+//
+// Cela peut créer des doublons invalides.
+//
+// Il faut:
+//   - vérifier si "Content-Length" existe déjà
+//   - ne l'ajouter que s'il est absent
+//nico
