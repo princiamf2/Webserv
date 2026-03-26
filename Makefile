@@ -5,12 +5,18 @@ CXXFLAGS = -Wall -Wextra -Werror #-std=c++98
 
 C = ./Core/
 SRCSCORE = $C$(NAME).cpp\
-			$Cmain.cpp
+			$CCore.cpp\
+			$CServer.cpp\
+			$Cmain.cpp\
+			$Cutils.cpp\
+
 OBJSCORE = $(SRCSCORE:.cpp=.o)
 
 
 P = ./Parsing/
-SRCSPARSING = $(P)ParseConfig.cpp
+SRCSPARSING = $(P)ParseConfig.cpp \
+              $(P)ParseServer.cpp \
+              $(P)ParseLocation.cpp
 OBJSPARSING = $(SRCSPARSING:.cpp=.o)
 
 
