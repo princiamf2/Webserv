@@ -79,15 +79,18 @@ static bool deleteFile(std::string const& filePath)
 {
 	return (std::remove(filePath.c_str()) == 0);
 }
+//recuperer extention
+static std::string getFileExtension(std::string const& filePath)
+{
+	size_t dotPos = filePath.rfind('.');
+	if (dotPos == std::string::npos)
+		return "";
+	return filePath.substr(dotPos);
+}
 //recuperer l'extention
 static std::string getContentType(std::string const& filePath)
 {
-	size_t dotPos = filePath.rfind('.');
-
-	if (dotPos == std::string::npos)
-		return "text/plain";
-
-	std::string extention = filePath.substr(dotPos);
+	std::string extention = getFileExtension(filePath);
 	if (extention == ".html" || extention == ".htm")
 		return "text/html";
 	if (extention == ".css")
@@ -209,7 +212,7 @@ std::string getReasonPhrase(int code)
 {
 	switch (code)
 	{
-	case 200: return "Ok";
+	case 200: return "OK";
 	case 201: return "Created";
 	case 301: return "Moved Permanently";
 	case 302: return "Found";
@@ -223,7 +226,7 @@ std::string getReasonPhrase(int code)
 	case 413: return "Payload Too Large";
 	case 500: return "Internal Server Error";
 	case 501: return "Not Implemented";
-	case 505: return "HTTP Version Not Suppoted";
+	case 505: return "HTTP Version Not Supported";
 	default: return "Internal Server Error";
 	}
 }
@@ -269,6 +272,17 @@ static HttpResponse buildErrorResponse(ServerConfig const& server, int code, std
 	response.body = buildErrorBody(code, path, directoryListingDenied);
 	return response;
 }
+//detection cgi autoriser
+static bool isCGIRequest(std::string const& filePath, Location const* location)
+{
+	std::string extension;
+	if (!location)
+		return false;
+	extension = getFileExtension(filePath);
+	if (extension.empty())
+		return false;
+	return (location->cgi_extensions.find(extension) != location->cgi_extensions.end());
+}
 //on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
 {
@@ -310,22 +324,47 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		std::string fileContent;
 		std::string filePath = buildFilePath(root, request.uri, location, server);
 
+		if (isCGIRequest(filePath, location))
+		{
+			response.statusCode = 200;
+			response.reasonPhrase = getReasonPhrase(200);
+			response.headers["Content-Type"] = "text/plain";
+			response.body = "CGI detected " + filePath + "\n";
+			return response;
+		}
 		if (isDirectory(filePath))
 		{
 			std::string indexPath = joinPath(filePath, resolveIndex(server, location));
 
 			if (readFileContent(indexPath, fileContent))
-				return buildErrorResponse(server, 200);
+			{
+				response.statusCode = 200;
+				response.reasonPhrase = getReasonPhrase(200);
+				response.headers["Content-Type"] = getContentType(indexPath);
+				response.body = fileContent;
+				return response;
+			}
 			if (isAutoIndexEnabled(location)
 				&& buildDirectoryListing(filePath, request.uri, fileContent))
-				return buildErrorResponse(server, 200);
+			{
+				response.statusCode = 200;
+				response.reasonPhrase = getReasonPhrase(200);
+				response.headers["Content-Type"] = "text/html";
+				response.body = fileContent;
+				return response;
+			}
 			return buildErrorResponse(server, 403, filePath, true);
 		}
 		if (!pathExists(filePath))
 			return buildErrorResponse(server, 404, filePath);
 		if (!readFileContent(filePath, fileContent))
 			return buildErrorResponse(server, 403, filePath);
-		return buildErrorResponse(server, 200);
+
+		response.statusCode = 200;
+		response.reasonPhrase = getReasonPhrase(200);
+		response.headers["Content-Type"] = getContentType(filePath);
+		response.body = fileContent;
+		return response;
 	}
 
 	if (request.method == "POST")
@@ -333,13 +372,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		std::string filePath = buildUploadPath(server, location);
 
 		if (!writeFileContent(filePath, request.body))
-		{
-			response.statusCode = 500;
-			response.reasonPhrase = "Internal Server Error";
-			response.headers["Content-Type"] = "text/plain";
-			response.body = "500 Failed to write file\n";
-			return response;
-		}
+			return buildErrorResponse(server, 500, filePath);
 
 		response.statusCode = 201;
 		response.reasonPhrase = "Created";
@@ -351,24 +384,15 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 	{
 		std::string filePath = buildFilePath(root, request.uri, location, server);
 
+		if (!pathExists(filePath))
+			return buildErrorResponse(server, 404, filePath);
 		if (!deleteFile(filePath))
-		{
-			response.statusCode = 404;
-			response.reasonPhrase = "Not Found";
-			response.headers["Content-Type"] = "text/plain";
-			response.body = "404 Not Found\n";
-			response.body += "file path = " + filePath + "\n";
-			return response;
-		}
+			return buildErrorResponse(server, 403, filePath);
 		response.statusCode = 200;
 		response.reasonPhrase = "OK";
 		response.headers["Content-Type"] = "text/plain";
 		response.body = "File deleted: " + filePath + "\n";
 		return response;
 	}
-	response.statusCode = 500;
-	response.reasonPhrase = "Internal Server Error";
-	response.headers["Content-Type"] = "text/plain";
-	response.body = "500 Internal Server Error\n";
-	return response;
+	return buildErrorResponse(server, 500);
 }
