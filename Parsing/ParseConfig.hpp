@@ -7,7 +7,7 @@
 #include <vector>
 #include "ServerConfig.hpp"
 
-std::string stripSemicolon(const std::string& s);
+bool stripSemicolon(std::string const& s, std::string& result);
 std::vector<ServerConfig> parseConfig(std::string path);
 
 bool expectOpenBracket(std::istringstream& current_line, std::istringstream& stream);
