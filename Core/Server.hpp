@@ -13,6 +13,7 @@
 #include "colors.hpp"
 #include "../Parsing/Location.hpp"
 #include "../Parsing/ParseConfig.hpp"
+#include "../HTTPRequest/HttpModule.hpp"
 
 
 //====================(DEFINES)=============================//
@@ -22,9 +23,10 @@
 //====================(STRUCTS)=============================//
 // client
 struct Client {
-	int		 fd;
-	std::string read_buf;   // recieve
-	std::string write_buf;  // to send
+	int         fd;
+	bool        toClose;
+	std::string readBuf;   // recieve
+	std::string writeBuf;  // to send
 	// others : adresse IP, config serveur associée, etc
 };
 
@@ -33,11 +35,12 @@ struct Client {
 class Server
 {
 	private:
+		ServerConfig                _conf;              // base config (principally for http)
 		std::string                 _host;              // like "0.0.0.0"
 		std::set<unsigned int>      _ports;             // like 8080
 		std::set<std::string>       _domainNames;       // like hello.ch
 		std::string                 _root;              // like ~/Webserv/srcs/
-	    std::string                 _index;             // like ~/Webserv/srcs/index.html
+		std::string                 _index;             // like ~/Webserv/srcs/index.html
 		std::map<int, std::string>  _errorPages;        // like ~/Webserv/srcs/404.html
 		unsigned int                _clientMaxBodySize; // like 100 for 100 Mo
 		std::vector<Location>       _locations;         // ikd ?
@@ -49,10 +52,12 @@ class Server
 		Server(ServerConfig serv);
 		~Server();
 		int         init(void);                         // init of the binds listen etc
-		int         acceptClient(int listen_fd);        // add a client to fds list
+		void        addClient(int fd);                  // add a client to fds list
+		void        removeClient(int fd);
 		void        readClient(int fd);                 // read what client sent
 		void        writeClient(int fd);                // write to the client
 		void        closeClient(int fd);                // close connection to client
+		bool        clientHasData(int fd);               // does a responce for the client exist
 		std::vector<int>& getListenFds(void);           // getter for fds
 		void debug();
 };
