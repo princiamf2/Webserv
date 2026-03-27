@@ -13,13 +13,14 @@ struct Location
 	std::set<std::string> allowed_methods_http; //pour GET, POST, DELETE
 	std::string root; //chemin dossier racine
 	std::string index; //fichier index par defaut
-	bool show_directory; //affiche la liste des fichiers , si pas index 
+	bool show_directory; //affiche la liste des fichiers , si pas index
+	bool show_directory_set; // indique si show_directory a déjà été assigné
 	std::string upload_dir; //dossier pour les fichiers uploades
 	std::pair <int, std::string> redirect_page; //code redirection + url redirection
 	std::set <std::string> cgi_extensions; //lquel CGI est active .py ou .php par exemple
 	std::map<std::string, std::string> cgi_interpreters;
-
-	Location() : show_directory(false), redirect_page(std::make_pair(0, "")) {} //CPP 98
+	
+	Location() : show_directory(false), show_directory_set(false), redirect_page(std::make_pair(0, "")) {}
 };
 
 #endif 
