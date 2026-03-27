@@ -5,9 +5,16 @@
 #include <sstream> //permet de lire le contenu du configfile ligne par ligne
 
 
-std::string stripSemicolon(const std::string& s) //pour enlever le ; a la fin de chaque ligne
+bool stripSemicolon(std::string const& s, std::string& result)
 {
-	return s.substr(0, s.find(";"));
+	size_t pos = s.find(';');
+
+	if (pos == std::string::npos)
+		return false;
+	if (pos != s.size() - 1)
+		return false;
+	result = s.substr(0, pos);
+	return true;
 }
 
 bool expectOpenBracket(std::istringstream& current_line, std::istringstream& stream)
