@@ -9,45 +9,45 @@ static bool parseLocation_Root(std::istringstream& locationStream, Location& loc
 {
     if (!location.root.empty())
     {
-        std::cerr << "ERROR: DOUBLE location root" << std::endl;
+        std::cerr << "ERROR: DOUBLE LOCATION ROOT" << std::endl;
         return false;
     }
 
     std::string root_path;
     if (!(locationStream >> root_path))
     {
-        std::cerr << "ERROR: NO location root" << std::endl;
+        std::cerr << "ERROR: NO LOCATION ROOT" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(root_path, root_path))
     {
-        std::cerr << "ERROR: WRONG location root syntax" << std::endl;
+        std::cerr << "ERROR: WRONG LOCATION ROOT SYNTAX" << std::endl;
         return false;
     }
 
     if (root_path.empty())
     {
-        std::cerr << "ERROR: WRONG location root" << std::endl;
+        std::cerr << "ERROR: WRONG LOCATION ROOT" << std::endl;
         return false;
     }
 
     if (root_path[0] != '/')
     {
-        std::cerr << "ERROR: WRONG location root must start by '/'" << std::endl;
+        std::cerr << "ERROR: LOCATION ROOT MUST START BY '/'" << std::endl;
         return false;
     }
 
     if (root_path.find("..") != std::string::npos)
     {
-        std::cerr << "ERROR: WRONG location root cannot have '..'" << std::endl;
+        std::cerr << "ERROR: LOCATION ROOT CANNOT CONTAIN '..'" << std::endl;
         return false;
     }
 
     std::string extra;
     if (locationStream >> extra)
     {
-        std::cerr << "ERROR: CANNOT have token after location root: " << extra << std::endl;
+        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER LOCATION ROOT: " << extra << std::endl;
         return false;
     }
 
@@ -59,33 +59,33 @@ static bool parseLocation_Index(std::istringstream& locationStream, Location& lo
 {
     if (!location.index.empty())
     {
-        std::cerr << "ERROR: DOUBLE location index" << std::endl;
+        std::cerr << "ERROR: DOUBLE LOCATION INDEX" << std::endl;
         return false;
     }
 
     std::string index_file;
     if (!(locationStream >> index_file))
     {
-        std::cerr << "ERROR: NO location index" << std::endl;
+        std::cerr << "ERROR: NO LOCATION INDEX" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(index_file, index_file))
     {
-        std::cerr << "ERROR: WRONG location index syntax" << std::endl;
+        std::cerr << "ERROR: WRONG LOCATION INDEX SYNTAX" << std::endl;
         return false;
     }
 
     if (index_file.empty())
     {
-        std::cerr << "ERROR: WRONG location index" << std::endl;
+        std::cerr << "ERROR: WRONG LOCATION INDEX" << std::endl;
         return false;
     }
 
     std::string extra;
     if (locationStream >> extra)
     {
-        std::cerr << "ERROR: unexpected token after location index: " << extra << std::endl;
+        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER LOCATION INDEX: " << extra << std::endl;
         return false;
     }
 
@@ -97,7 +97,7 @@ static bool parseLocation_Methods(std::istringstream& locationStream, Location& 
 {
     if (!location.allowed_methods_http.empty())
     {
-        std::cerr << "ERROR: duplicate methods directive" << std::endl;
+        std::cerr << "ERROR: DOUBLE LOCATION METHODS " << std::endl;
         return false;
     }
 
@@ -109,7 +109,7 @@ static bool parseLocation_Methods(std::istringstream& locationStream, Location& 
     {
         if (ended)
         {
-            std::cerr << "ERROR: unexpected token after methods: " << method << std::endl;
+            std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER METHODS: " << method << std::endl;
             return false;
         }
 
@@ -120,7 +120,7 @@ static bool parseLocation_Methods(std::istringstream& locationStream, Location& 
         {
             if (!stripSemicolon(method, method))
             {
-                std::cerr << "ERROR: WRONG methods syntax" << std::endl;
+                std::cerr << "ERROR: WRONG METHODS SYNTAX" << std::endl;
                 return false;
             }
             ended = true;
@@ -128,7 +128,7 @@ static bool parseLocation_Methods(std::istringstream& locationStream, Location& 
 
         if (method != "GET" && method != "POST" && method != "DELETE")
         {
-            std::cerr << "ERROR: WRONG method " << method << std::endl;
+            std::cerr << "ERROR: WRONG METHOD " << method << std::endl;
             return false;
         }
 
@@ -137,13 +137,13 @@ static bool parseLocation_Methods(std::istringstream& locationStream, Location& 
 
     if (!found)
     {
-        std::cerr << "ERROR: NO valid methods" << std::endl;
+        std::cerr << "ERROR: NO VALID METHODS" << std::endl;
         return false;
     }
 
     if (!ended)
     {
-        std::cerr << "ERROR: NO ';' after methods" << std::endl;
+        std::cerr << "ERROR: NO ';' AFTER METHODS" << std::endl;
         return false;
     }
 
@@ -154,20 +154,20 @@ static bool parseLocation_ShowDirectory(std::istringstream& locationStream, Loca
 {
     if (location.show_directory_set)
     {
-        std::cerr << "ERROR: DOUBLE show_directory" << std::endl;
+        std::cerr << "ERROR: DOUBLE SHOW_DIRECTORY" << std::endl;
         return false;
     }
 
     std::string show_directory_str;
     if (!(locationStream >> show_directory_str))
     {
-        std::cerr << "ERROR: NO show_directory value" << std::endl;
+        std::cerr << "ERROR: NO SHOW_DIRECTORY VALUE" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(show_directory_str, show_directory_str))
     {
-        std::cerr << "ERROR: WRONG show_directory syntax" << std::endl;
+        std::cerr << "ERROR: WRONG SHOW_DIRECTORY SYNTAX" << std::endl;
         return false;
     }
 
@@ -177,14 +177,14 @@ static bool parseLocation_ShowDirectory(std::istringstream& locationStream, Loca
         location.show_directory = false;
     else
     {
-        std::cerr << "ERROR: WRONG show_directory value " << show_directory_str << std::endl;
+        std::cerr << "ERROR: WRONG SHOW_DIRECTORY VALUE " << show_directory_str << std::endl;
         return false;
     }
 
     std::string extra;
     if (locationStream >> extra)
     {
-        std::cerr << "ERROR: CANNOT have wrong token after show_directory: " << extra << std::endl;
+        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER SHOW_DIRECTORY: " << extra << std::endl;
         return false;
     }
 
@@ -196,45 +196,45 @@ static bool parseLocation_UploadDir(std::istringstream& locationStream, Location
 {
     if (!location.upload_dir.empty())
     {
-            std::cerr << "ERROR: DOUBLE upload_dir" << std::endl;
+            std::cerr << "ERROR: DOUBLE UPLOAD_DIR" << std::endl;
             return false;
     }
 
     std::string upload_dir;
     if (!(locationStream >> upload_dir))
     {
-        std::cerr << "ERROR: NO upload_dir value" << std::endl;
+        std::cerr << "ERROR: NO UPLOAD_DIR VALUE" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(upload_dir, upload_dir))
     {
-        std::cerr << "ERROR: WRONG upload_dir syntax" << std::endl;
+        std::cerr << "ERROR: WRONG UPLOAD_DIR SYNTAX" << std::endl;
         return false;
     }
 
     if (upload_dir.empty())
     {
-        std::cerr << "ERROR: WRONG upload_dir" << std::endl;
+        std::cerr << "ERROR: WRONG UPLOAD_DIR" << std::endl;
         return false;
     }
 
     if (upload_dir[0] != '/')
     {
-        std::cerr << "ERROR: WRONG upload_dir must start with '/'" << std::endl;
+        std::cerr << "ERROR: WRONG UPLOAD_DIR MUST START BY '/'" << std::endl;
         return false;
     }
 
     if (upload_dir.find("..") != std::string::npos)
     {
-        std::cerr << "ERROR: WRONG upload_dir cannot contain '..'" << std::endl;
+        std::cerr << "ERROR: WRONG UPLOAD_DIR CANNOT CONTAIN '..'" << std::endl;
         return false;
     }
 
     std::string extra;
     if (locationStream >> extra)
     {
-        std::cerr << "ERROR: CANNOT have token after upload_dir: " << extra << std::endl;
+        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER UPLOAD_DIR: " << extra << std::endl;
         return false;
     }
 
@@ -246,38 +246,38 @@ static bool parseLocation_RedirectPage(std::istringstream& locationStream, Locat
 {
     if (location.redirect_page.first != 0 || !location.redirect_page.second.empty())
     {
-        std::cerr << "ERROR: DOUBLE redirect_page dir" << std::endl;
+        std::cerr << "ERROR: DOUBLE REDIRECT_PAGE" << std::endl;
         return false;
     }
 
     std::string code_str, url_str;
     if (!(locationStream >> code_str >> url_str))
     {
-        std::cerr << "ERROR: NO redirect_page values" << std::endl;
+        std::cerr << "ERROR: NO REDIRECT_PAGE VALUES" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(url_str, url_str))
     {
-        std::cerr << "ERROR: WRONG redirect url syntax" << std::endl;
+        std::cerr << "ERROR: WRONG REDIRECT_PAGE URL SYNTAX" << std::endl;
         return false;
     }
 
     if (url_str.empty())
     {
-        std::cerr << "ERROR: WRONG redirect url" << std::endl;
+        std::cerr << "ERROR: WRONG REDIRECT_PAGE URL" << std::endl;
         return false;
     }
 
     if (url_str[0] != '/' && url_str.find("http://") != 0 )
     {
-        std::cerr << "ERROR: WRONG redirect url must start with '/' or 'http://'" << std::endl;
+        std::cerr << "ERROR: WRONG REDIRECT_PAGE URL MUST START WITH '/' OR 'http://'" << std::endl;
         return false;
     }
 
     if (url_str.find("..") != std::string::npos)
     {
-        std::cerr << "ERROR: WRONG redirect url cannot contain '..'" << std::endl;
+        std::cerr << "ERROR: WRONG REDIRECT_PAGE URL CANNOT CONTAIN '..'" << std::endl;
         return false;
     }
 
@@ -286,27 +286,27 @@ static bool parseLocation_RedirectPage(std::istringstream& locationStream, Locat
 
     if (!(in_string_stream >> code))
     {
-        std::cerr << "ERROR: WRONG redirect code: " << code_str << std::endl;
+        std::cerr << "ERROR: WRONG REDIRECT_PAGE CODE: " << code_str << std::endl;
         return false;
     }
 
     in_string_stream >> std::ws;
     if (in_string_stream.peek() != std::char_traits<char>::eof())
     {
-        std::cerr << "ERROR: WRONG redirect code: " << code_str << std::endl;
+        std::cerr << "ERROR: WRONG REDIRECT_PAGE CODE: " << code_str << std::endl;
         return false;
     }
 
     if (code < 300 || code > 399)
     {
-        std::cerr << "ERROR: WRONG redirect code must be between 300-399: " << code << std::endl;
+        std::cerr << "ERROR: WRONG REDIRECT_PAGE CODE MUST BE BETWEEN 300-399: " << code << std::endl;
         return false;
     }
 
     std::string extra;
     if (locationStream >> extra)
     {
-        std::cerr << "ERROR: CANNOT have token after redirect_page: " << extra << std::endl;
+        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER REDIRECT_PAGE: " << extra << std::endl;
         return false;
     }
 
@@ -324,7 +324,7 @@ static bool parseLocation_CgiExtensions(std::istringstream& locationStream, Loca
     {
         if (ended)
         {
-            std::cerr << "ERROR: CANNOT have token after cgi_extensions: " << cgi_extension << std::endl;
+            std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER CGI_EXTENSIONS: " << cgi_extension << std::endl;
             return false;
         }
 
@@ -335,7 +335,7 @@ static bool parseLocation_CgiExtensions(std::istringstream& locationStream, Loca
         {
             if (!stripSemicolon(cgi_extension, cgi_extension))
             {
-                std::cerr << "ERROR: WRONG CGI extension syntax" << std::endl;
+                std::cerr << "ERROR: WRONG CGI EXTENSION SYNTAX" << std::endl;
                 return false;
             }
             ended = true;
@@ -343,13 +343,13 @@ static bool parseLocation_CgiExtensions(std::istringstream& locationStream, Loca
 
         if (cgi_extension.empty())
         {
-            std::cerr << "ERROR: WRONG CGI extension" << std::endl;
+            std::cerr << "ERROR: WRONG CGI EXTENSION" << std::endl;
             return false;
         }
 
         if (cgi_extension[0] != '.')
         {
-            std::cerr << "ERROR: CGI extension must start with '.': " << cgi_extension << std::endl;
+            std::cerr << "ERROR: CGI EXTENSION MUST START BY '.': " << cgi_extension << std::endl;
             return false;
         }
 
@@ -358,13 +358,13 @@ static bool parseLocation_CgiExtensions(std::istringstream& locationStream, Loca
 
     if (!found)
     {
-        std::cerr << "ERROR: NO CGI extensions" << std::endl;
+        std::cerr << "ERROR: NO CGI EXTENSIONS" << std::endl;
         return false;
     }
 
     if (!ended)
     {
-        std::cerr << "ERROR: NO ';' after cgi_extensions" << std::endl;
+        std::cerr << "ERROR: NO ';' AFTER CGI_EXTENSIONS" << std::endl;
         return false;
     }
 
@@ -378,38 +378,38 @@ static bool parseLocation_CgiInterpreter(std::istringstream& locationStream, Loc
 
     if (!(locationStream >> extension >> interpreter))
     {
-        std::cerr << "ERROR: NO CGI interpreter value" << std::endl;
+        std::cerr << "ERROR: NO CGI_INTERPRETER VALUE" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(interpreter, interpreter))
     {
-        std::cerr << "ERROR: WRONG CGI interpreter syntax" << std::endl;
+        std::cerr << "ERROR: WRONG CGI_INTERPRETER SYNTAX" << std::endl;
         return false;
     }
 
     if (extension.empty() || extension[0] != '.')
     {
-        std::cerr << "ERROR: WRONG CGI extension" << std::endl;
+        std::cerr << "ERROR: WRONG CGI_EXTENSION" << std::endl;
         return false;
     }
 
     if (interpreter.empty())
     {
-        std::cerr << "ERROR: WRONG CGI interpreter" << std::endl;
+        std::cerr << "ERROR: WRONG CGI_INTERPRETER" << std::endl;
         return false;
     }
 
     if (location.cgi_interpreters.find(extension) != location.cgi_interpreters.end())
     {
-        std::cerr << "ERROR: DOUBLE CGI interpreter for extension " << extension << std::endl;
+        std::cerr << "ERROR: DOUBLE CGI_INTERPRETER FOR EXTENSION " << extension << std::endl;
         return false;
     }
 
     std::string extra;
     if (locationStream >> extra)
     {
-        std::cerr << "ERROR: CANNOT have token after cgi_interpreter: " << extra << std::endl;
+        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER CGI_INTERPRETER: " << extra << std::endl;
         return false;
     }
 
@@ -424,12 +424,12 @@ bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, S
 
     if (!(lineStream >> location.path))
     {
-        std::cerr << "ERROR: NO location path" << std::endl;
+        std::cerr << "ERROR: NO LOCATION PATH" << std::endl;
         return false;
     }
     if (location.path.empty() || location.path[0] != '/')
     {
-        std::cerr << "ERROR: WRONG location path" << std::endl;
+        std::cerr << "ERROR: WRONG LOCATION PATH" << std::endl;
         return false;
     }
     if (!expectOpenBracket(lineStream, stream))
@@ -492,18 +492,18 @@ bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, S
         }
 		else
 		{
-			std::cerr << "ERROR: UNKNOWN location directive: " << location_word << std::endl;
+			std::cerr << "ERROR: UNKNOWN LOCATION DIR: " << location_word << std::endl;
 			return false;
 		}
 	}
 	if (!closed)
 	{
-		std::cerr << "ERROR: NOT closed by }" << std::endl;
+		std::cerr << "ERROR: NOT CLOSED BY }" << std::endl;
 		return false;
 	}
 	if (location.root.empty() && server.root.empty())
 	{
-		std::cerr << "ERROR: location has no root and server has no root" << std::endl;
+		std::cerr << "ERROR: LOCATION HAS NO ROOT AND SERVER HAS NO ROOT" << std::endl;
 		return false;
 	}
 	for (std::set<std::string>::const_iterator iter = location.cgi_extensions.begin();
@@ -511,7 +511,7 @@ bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, S
 	{
 		if (location.cgi_interpreters.find(*iter) == location.cgi_interpreters.end())
 		{
-			std::cerr << "ERROR: NO CGI interpreter for extension " << *iter << std::endl;
+			std::cerr << "ERROR: NO CGI_INTERPRETER FOR EXTENSION " << *iter << std::endl;
 			return false;
 		}
 	}
@@ -519,7 +519,7 @@ bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, S
 	{
 		if (server.locations[i].path == location.path)
 		{
-			std::cerr << "ERROR: DOUBLE location path " << location.path << std::endl;
+			std::cerr << "ERROR: DOUBLE LOCATION PATH " << location.path << std::endl;
 			return false;
 		}
 	}
