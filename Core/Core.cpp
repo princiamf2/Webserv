@@ -54,25 +54,69 @@ void Core::runPoll()
 
 			if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
 			{
-				// closeClient(fd);
+				closeClient(fd);
+				size--;
+				i--;
 				continue;
 			}
 			if (_fdToServer.count(fd) && (_pollFds[i].revents & POLLIN)) // new connection
 			{
-				// acceptClient(fd);
+				acceptClient(fd);
 				continue;
 			}
 			if (_fdToClient.count(fd)) // a client is actif
 			{
 				if (_pollFds[i].revents & POLLIN)
-					// _fdToClient[fd]->readClient(fd);
-					std::cout << " _fdToClient[fd]->readClient(fd);" << std::endl;
+					_fdToClient[fd]->readClient(fd);
 				if (_pollFds[i].revents & POLLOUT)
-					// _fdToClient[fd]->writeClient(fd);
-					std::cout << "_fdToClient[fd]->writeClient(fd);" << std::endl;
+					_fdToClient[fd]->writeClient(fd);
 			}
+			if (_fdToClient[fd]->clientHasData(fd))
+				_pollFds[i].events |= POLLOUT;
+
+			if (_fdToClient[fd]->clientToClose(fd))
+				closeClient(fd);
+
 		}
 	}
+}
+
+void Core::acceptClient(int listenFd)
+{
+	struct sockaddr_in clientAddr;
+	socklen_t clientLen = sizeof(clientAddr);
+
+	int clientFd = accept(listenFd, (struct sockaddr*)&clientAddr, &clientLen);
+	if (clientFd == -1)
+		return ((void)error("Accept returned -1"));
+	fcntl(clientFd, F_SETFL, fcntl(clientFd, F_GETFL, 0) | O_NONBLOCK);
+
+	struct pollfd pfd = {clientFd, POLLIN, 0};
+	_pollFds.push_back(pfd);
+
+	_fdToClient[clientFd] = _fdToServer[listenFd]; // associate client to server
+	_fdToServer[listenFd]->addClient(clientFd); // add client in server
+	std::cout << MAGENTA << "CLIENT ADDED" << RESET << std::endl;
+}
+
+void Core::closeClient(int fd)
+{
+	if (_fdToClient.count(fd))
+	{
+		_fdToClient[fd]->removeClient(fd);
+		_fdToClient.erase(fd);
+	}
+
+	for (size_t i = 0; i < _pollFds.size(); i++)
+	{
+		if (_pollFds[i].fd == fd)
+		{
+			_pollFds.erase(_pollFds.begin() + i);
+			break ;
+		}
+	}
+	close(fd);
+	std::cout << MAGENTA << "CLIENT REMOVED" << RESET << std::endl;
 }
 
 Core::~Core() {};
