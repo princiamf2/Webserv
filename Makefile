@@ -23,6 +23,7 @@ OBJSPARSING = $(SRCSPARSING:.cpp=.o)
 H = ./HTTPRequest/
 SRCSHTTP = $(H)HttpParser.cpp \
 			$(H)HttpResponse.cpp\
+			$(H)HttpModule.cpp\
 			$(H)HttpResponseBuilder.cpp\
 			$(H)RequestHandler.cpp\
 
