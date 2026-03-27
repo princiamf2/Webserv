@@ -1,6 +1,8 @@
 #include "HttpParser.hpp"
+#include <cstddef>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 
 // petit outil pour retirer espace au debut et a la fin 
 static std::string trim(const std::string& str)
@@ -13,6 +15,34 @@ static std::string trim(const std::string& str)
     while (end > start && (str[end - 1] == ' ' || str[end - 1] == '\t' || str[end - 1] == '\r'))
         end--;
     return str.substr(start, end - start);
+}
+
+//separe uri en path et query
+static void splitUri(std::string const& uri, std::string& path, std::string& query)
+{
+    size_t pos = uri.find('?');
+
+    if (pos == std::string::npos)
+    {
+        path = uri;
+        query.clear();
+        return;
+    }
+    path = uri.substr(0, pos);
+    query = uri.substr(pos + 1);
+}
+
+static size_t HttpParserContentLength(std::string const& value)
+{
+    std::istringstream iss(value);
+    size_t length;
+
+    if (!(iss >> length))
+        throw std::runtime_error("Invalid Content-Length");
+    iss >> std::ws;
+    if (iss.peek() != EOF)
+        throw std::runtime_error("Invalid Content-Length");
+    return length;
 }
 
 HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
@@ -38,6 +68,12 @@ HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
     if (!(requestLine >> request.method >> request.uri >> request.version))//je mets chaque partie de la line ou il faut car une requete doit toujours commecer par la method le uri et la version
         throw std::runtime_error("Invalid HTTP request line");             //pour le moment je verifie pas si les methode sont corect etc...
 
+    splitUri(request.uri, request.path, request.query);
+    if (request.path.empty())
+        throw std::runtime_error("Invalid HTTP request empty path");
+    if (request.path[0] != '/')
+        throw std::runtime_error("Invalid HTTP request: path must start with /");
+
     //ici je lis le reste de hearder et je cherche : qui est le separateur key value
     while (std::getline(stream, line))
     {
@@ -50,34 +86,15 @@ HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
         std::string value = trim(line.substr(colonPos + 1));
         request.headers[key] = value;
     }
+    if (request.version == "HTTP/1.1"
+        && request.headers.find("Host") == request.headers.end())
+        throw std::runtime_error("Invalid HTTP request: missing Host header");
+    std::map<std::string, std::string>::const_iterator it = request.headers.find("Content-Length");
+    if (it != request.headers.end())
+    {
+        size_t expected = HttpParserContentLength(it->second);
+        if (request.body.size() != expected)
+            throw std::runtime_error("Invalid HTTP request: body size does not match Content-Length");
+    }
     return request;
 }
-
-// TODO:
-// Le parsing HTTP est incomplet et incorrect sur plusieurs points:
-//
-// 1. Fin des headers:
-//    Une requête HTTP sépare les headers du body par une ligne vide ("\r\n").
-//    Il faut arrêter la lecture des headers dès que line == "".
-//    Sinon, le body est interprété comme un header -> erreur.
-//
-// 2. Lecture du body:
-//    request.body n'est jamais rempli actuellement.
-//    Il faut lire le reste du stream après les headers.
-//
-// 3. Content-Length:
-//    Pour les requêtes POST, il faut lire exactement le nombre d'octets indiqué
-//    dans le header "Content-Length". Sinon, le body peut être incomplet ou trop lu.
-//
-// 4. Header Host:
-//    En HTTP/1.1, le header "Host" est obligatoire.
-//    Il faudra vérifier sa présence et sinon retourner une erreur 400.
-//
-// 5. URI:
-//    L'URI est stockée brute.
-//    Il faudra plus tard la découper en:
-//       - path (pour le routing)
-//       - query string (optionnelle)
-//
-// Sans ces corrections, le parsing HTTP est non conforme et instable.
-//nico

@@ -5,6 +5,7 @@
 #include <string>
 #include <set>
 #include <utility> // pour std::pair
+#include <map>
 
 struct Location
 {
@@ -16,6 +17,7 @@ struct Location
 	std::string upload_dir; //dossier pour les fichiers uploades
 	std::pair <int, std::string> redirect_page; //code redirection + url redirection
 	std::set <std::string> cgi_extensions; //lquel CGI est active .py ou .php par exemple
+	std::map<std::string, std::string> cgi_interpreters;
 
 	Location() : show_directory(false), redirect_page(std::make_pair(0, "")) {} //CPP 98
 };

@@ -1,10 +1,12 @@
 #include "RequestHandler.hpp"
+#include <cstddef>
 #include <sstream>
 #include <fstream>
 #include <string>
 #include <cstdio>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <vector>
 
 //petit check de la taile du body
 static bool isBodySizeValid(HttpRequest const& request, ServerConfig const& server)
@@ -34,45 +36,87 @@ static bool isMethodAllowed(std::string const& method, Location const* location)
 		return true;
 	return (location->allowed_methods_http.find(method) != location->allowed_methods_http.end());
 }
-//construit le path
-static std::string buildFilePath(std::string const& root, std::string const& uri, Location const* location, ServerConfig const& server)
+//normalisation du chemin relatif
+static bool normalizeRelativePath(std::string const& rawPath, std::string& normalized)
 {
-	std::string relativPath = uri;
+	std::vector<std::string> segments;
+	size_t i = 0;
 
-	if (location && uri.find(location->path) == 0)
-		relativPath = uri.substr(location->path.size());
-	if (relativPath.empty() || relativPath == "/")
+	while (i < rawPath.size())
 	{
-		if (location && !location->index.empty())
-			relativPath = "/" + location->index;
-		else if (!server.index.empty())
-			relativPath = "/" + server.index;
-		else
-			relativPath = "/index.html";
+		while (i < rawPath.size() && rawPath[i] == '/')
+			++i;
+		size_t start = i;
+		while (i < rawPath.size() && rawPath[i] != '/')
+			++i;
+		std::string part = rawPath.substr(start, i - start);
+		if (part.empty() || part == ".")
+			continue;
+		if (part == "..")
+		{
+			if (segments.empty())
+				return false;
+			segments.pop_back();
+			continue;
+		}
+		segments.push_back(part);
 	}
-	return root + relativPath;
+	normalized.clear();
+	for (size_t j = 0; j < segments.size(); ++j)
+		normalized += "/" + segments[j];
+	if (normalized.empty())
+		normalized = "/";
+	return true;
+}
+static bool locationMatches(std::string const& requestPath, std::string const& locationPath)
+{
+	if (locationPath.empty())
+		return false;
+	if (requestPath == locationPath)
+		return true;
+	if (requestPath.find(locationPath) != 0)
+		return false;
+	if (locationPath[locationPath.size() - 1] == '/')
+		return true;
+	if (requestPath.size() > locationPath.size()
+		&& requestPath[locationPath.size()] == '/')
+		return true;
+	return false;
+}
+//construit le path
+static bool buildFilePath(std::string const& root, std::string const& path, Location const* location, ServerConfig const& server, std::string& filePath)
+{
+    std::string relativePath = path;
+	std::string normalizedPath;
+
+    if (location && locationMatches(path, location->path))
+		relativePath = path.substr(location->path.size());
+    if (relativePath.empty() || relativePath == "/")
+    {
+        if (location && !location->index.empty())
+            relativePath = "/" + location->index;
+        else if (!server.index.empty())
+            relativePath = "/" + server.index;
+        else
+            relativePath = "/index.html";
+    }
+	if (!normalizeRelativePath(relativePath, normalizedPath))
+		return false;
+	if (!root.empty() && root[root.size() - 1] == '/')
+		filePath = root.substr(0, root.size() - 1) + normalizedPath;
+	else
+		filePath = root + normalizedPath;
+    return true;
 }
 
 // TODO:
-// Cette fonction utilise directement l'URI pour construire un chemin filesystem,
-// ce qui pose plusieurs problèmes critiques:
+// Cette version normalise les segments "." et ".." et bloque les remontées
+// au-dessus de la racine logique.
 //
-// 1. Query string:
-//    L'URI peut contenir "?...", qui ne doit pas être utilisé pour accéder au fichier.
-//    Il faut utiliser uniquement le path.
-//
-// 2. Sécurité:
-//    Aucune protection contre les attaques de type "../" (directory traversal).
-//    Exemple: GET /../../etc/passwd
-//    Il faut normaliser ou refuser ce type de chemin.
-//
-// 3. Mapping direct URI -> filesystem:
-//    Ce mapping est trop naïf.
-//    Il faut s'assurer que le chemin final reste bien dans le root configuré.
-//
-// Sans ces protections, le serveur est vulnérable et incorrect.
-//nico 
-
+// Amélioration possible plus tard:
+// - utiliser realpath() pour une canonisation filesystem réelle
+// - gérer les symlinks
+// - gérer le décodage URL (%2e%2e, etc.)
 
 //lire le fichier ce trouvant sur le path crée
 static bool readFileContent(std::string const& filePath, std::string& content)
@@ -101,7 +145,7 @@ static bool deleteFile(std::string const& filePath)
 {
 	return (std::remove(filePath.c_str()) == 0);
 }
-//recuperer extention
+//recuperer extension
 static std::string getFileExtension(std::string const& filePath)
 {
 	size_t dotPos = filePath.rfind('.');
@@ -109,23 +153,23 @@ static std::string getFileExtension(std::string const& filePath)
 		return "";
 	return filePath.substr(dotPos);
 }
-//recuperer l'extention
+//recuperer l'extension
 static std::string getContentType(std::string const& filePath)
 {
-	std::string extention = getFileExtension(filePath);
-	if (extention == ".html" || extention == ".htm")
+	std::string extension = getFileExtension(filePath);
+	if (extension == ".html" || extension == ".htm")
 		return "text/html";
-	if (extention == ".css")
+	if (extension == ".css")
 		return "text/css";
-	if (extention == ".js")
+	if (extension == ".js")
 		return "application/javascript";
-	if (extention == ".jpeg" || extention == ".jpg")
+	if (extension == ".jpeg" || extension == ".jpg")
 		return "image/jpeg";
-	if (extention == ".png")
+	if (extension == ".png")
 		return "image/png";
-	if (extention == ".gif")
+	if (extension == ".gif")
 		return "image/gif";
-	if (extention == ".txt")
+	if (extension == ".txt")
 		return "text/plain";
 	return "application/octet-stream";
 }
@@ -183,7 +227,7 @@ static bool isAutoIndexEnabled(Location const* location)
 }
 //une page html simple avec la liste des dossier
 static bool buildDirectoryListing(std::string const& dirPath,
-	std::string const& uri, std::string& html)
+	std::string const& path, std::string& html)
 {
 	DIR* dir;
 	struct dirent* entry;
@@ -191,7 +235,7 @@ static bool buildDirectoryListing(std::string const& dirPath,
 	dir = opendir(dirPath.c_str());
 	if (!dir)
 		return false;
-	html = "<html><body><h1>Index of " + uri + "</h1><ul>";
+	html = "<html><body><h1>Index of " + path + "</h1><ul>";
 	entry = readdir(dir);
 	while (entry)
 	{
@@ -200,10 +244,10 @@ static bool buildDirectoryListing(std::string const& dirPath,
 		if (name != "." && name != "..")
 		{
 			html += "<li><a href=\"";
-			if (!uri.empty() && uri[uri.size() - 1] == '/')
-				html += uri + name;
+			if (!path.empty() && path[path.size() - 1] == '/')
+				html += path + name;
 			else
-				html += uri + "/" + name;
+				html += path + "/" + name;
 			html += "\">" + name + "</a></li>";
 		}
 		entry = readdir(dir);
@@ -230,7 +274,7 @@ static int resolveRedirectCode(Location const* location)
 	return 302;
 }
 //mets la bonne raison celon le bon code
-std::string getReasonPhrase(int code)
+static std::string getReasonPhrase(int code)
 {
 	switch (code)
 	{
@@ -295,7 +339,7 @@ static HttpResponse buildErrorResponse(ServerConfig const& server, int code, std
 	return response;
 }
 //detection cgi autoriser
-static bool isCGIRequest(std::string const& filePath, Location const* location)
+static bool isCgiRequest(std::string const& filePath, Location const* location)
 {
 	std::string extension;
 	if (!location)
@@ -305,6 +349,16 @@ static bool isCGIRequest(std::string const& filePath, Location const* location)
 		return false;
 	return (location->cgi_extensions.find(extension) != location->cgi_extensions.end());
 }
+static std::string getCgiInterpreter(std::string const& extension, Location const* location)
+{
+	if (!location)
+		return "";
+	std::map<std::string, std::string>::const_iterator it = location->cgi_interpreters.find(extension);
+	if (it == location->cgi_interpreters.end())
+		return "";
+	return it->second;
+}
+
 //on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
 {
@@ -344,14 +398,25 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 	if (request.method == "GET")
 	{
 		std::string fileContent;
-		std::string filePath = buildFilePath(root, request.uri, location, server);
+		std::string filePath;
 
-		if (isCGIRequest(filePath, location))
+		if (!buildFilePath(root, request.path, location, server, filePath))
+			return buildErrorResponse(server, 403, request.path);
+		if (isCgiRequest(filePath, location))
 		{
+			std::string extension = getFileExtension(filePath);
+			std::string interpreter = getCgiInterpreter(extension, location);
+
+			if (interpreter.empty())
+				return buildErrorResponse(server, 500, filePath);
+
 			response.statusCode = 200;
 			response.reasonPhrase = getReasonPhrase(200);
 			response.headers["Content-Type"] = "text/plain";
-			response.body = "CGI detected " + filePath + "\n";
+			response.body = "CGI detected\n";
+			response.body += "script: " + filePath + "\n";
+			response.body += "extension: " + extension + "\n";
+			response.body += "interpreter: " + interpreter + "\n";
 			return response;
 		}
 		if (isDirectory(filePath))
@@ -367,7 +432,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 				return response;
 			}
 			if (isAutoIndexEnabled(location)
-				&& buildDirectoryListing(filePath, request.uri, fileContent))
+				&& buildDirectoryListing(filePath, request.path, fileContent))
 			{
 				response.statusCode = 200;
 				response.reasonPhrase = getReasonPhrase(200);
@@ -402,21 +467,20 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		response.body = "File created at: " + filePath + "\n";
 		return response;
 	}
+
 	// TODO:
-// Le chemin de sortie est actuellement hardcodé:
-//     root + "/upload.txt"
-//
-// Il faut:
-//   - utiliser location->upload_dir si défini
-//   - éventuellement utiliser un nom dynamique (ex: timestamp, nom envoyé, etc.)
-//
-// Sinon, toutes les requêtes POST écrasent le même fichier, ce qui est incorrect.
-//nico
+// Le fichier d'upload utilise encore un nom fixe "upload.txt".
+// Améliorations possibles:
+// - générer un nom unique
+// - utiliser un nom fourni par la requête si vous l’implémentez plus tard
+// - éviter que plusieurs POST écrasent le même fichier
 
 	if (request.method == "DELETE")
 	{
-		std::string filePath = buildFilePath(root, request.uri, location, server);
+		std::string filePath;
 
+		if (!buildFilePath(root, request.path, location, server, filePath))
+			return buildErrorResponse(server, 403, request.path);
 		if (!pathExists(filePath))
 			return buildErrorResponse(server, 404, filePath);
 		if (!deleteFile(filePath))
@@ -435,32 +499,11 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 //
 // Problèmes actuels:
 //
-// 1. error_pages:
-//    Les pages d'erreur configurées dans server.error_pages ne sont jamais utilisées.
-//    Il faut servir les fichiers d'erreur personnalisés si définis.
-//
-// 2. upload_dir:
-//    Les requêtes POST écrivent toujours dans "root/upload.txt".
-//    Il faut utiliser location->upload_dir si défini.
-//
-// 3. redirect_page:
-//    Les redirections configurées (code + URL) ne sont pas gérées.
-//    Il faut détecter et retourner une réponse 3xx avec header Location.
-//
-// 4. show_directory:
-//    Si aucun index n'est trouvé et show_directory == true,
-//    il faut générer un listing du dossier.
-//
-// 5. cgi_extensions:
-//    Les extensions CGI sont parsées mais jamais utilisées.
-//    Il faudra détecter ces fichiers et les exécuter via CGI.
-//
-// 6. HTTP logique:
-//    Certaines erreurs devraient être plus fines:
-//      - 400 (Bad Request)
-//      - 403 (Forbidden)
-//      - 404 (Not Found)
-//    Actuellement tout est simplifié.
+// 5. CGI:
+//    Les fichiers CGI sont détectés,
+//    mais ne sont pas encore exécutés.
+//    Il faut encore lancer l'interpréteur avec fork/execve
+//    et récupérer la sortie du script.
 //
 // Conclusion:
 //    La config est bien parsée mais pas encore réellement appliquée ici.

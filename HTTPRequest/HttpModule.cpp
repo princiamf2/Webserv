@@ -5,24 +5,39 @@
 #include "HttpResponseBuilder.hpp"
 #include <cstddef>
 
-// choisit la location la plus précise : plus long préfixe qui matche l'URI
-static Location const* findBestLocation(ServerConfig const& server,
-                                        std::string const& uri)
+// choisit la location la plus précise : plus long préfixe qui match
+static bool locationMatches(std::string const& requestPath, std::string const& locationPath)
 {
-    Location const* best = NULL;
-    size_t bestLen = 0;
+	if (locationPath.empty())
+		return false;
+	if (requestPath == locationPath)
+		return true;
+	if (requestPath.find(locationPath) != 0)
+		return false;
+	if (locationPath[locationPath.size() - 1] == '/')
+		return true;
+	if (requestPath.size() > locationPath.size()
+		&& requestPath[locationPath.size()] == '/')
+		return true;
+	return false;
+}
 
-    for (size_t i = 0; i < server.locations.size(); ++i)
-    {
-        Location const& loc = server.locations[i];
+static Location const* findBestLocation(ServerConfig const& server, std::string const& path)
+{
+	Location const* best = NULL;
+	size_t bestLen = 0;
 
-        if (uri.find(loc.path) == 0 && loc.path.size() > bestLen)
-        {
-            best = &server.locations[i];
-            bestLen = loc.path.size();
-        }
-    }
-    return best;
+	for (size_t i = 0; i < server.locations.size(); ++i)
+	{
+		Location const& loc = server.locations[i];
+
+		if (locationMatches(path, loc.path) && loc.path.size() > bestLen)
+		{
+			best = &server.locations[i];
+			bestLen = loc.path.size();
+		}
+	}
+	return best;
 }
 
 // transforme toute erreur interne en réponse HTTP exploitable
@@ -44,7 +59,7 @@ std::string handleRawHttpRequest(std::string const& rawRequest,
     try
     {
         HttpRequest request = HttpParser::parseRequest(rawRequest);
-        Location const* location = findBestLocation(server, request.uri);
+        Location const* location = findBestLocation(server, request.path);
         HttpResponse response = RequestHandler::handleRequest(request, server, location);
         return HttpResponseBuilder::buildResponse(response);
     }
