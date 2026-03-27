@@ -30,51 +30,6 @@ void Core::addFdsToCore(size_t serverIndex)
 
 void Core::runPoll()
 {
-<<<<<<< HEAD
-    while (true) //we'll need to handle signals
-    {
-        int ret = poll(_pollFds.data(), _pollFds.size(), -1); // timeout 5s
-
-        if (ret == -1)
-        {
-            if (errno == EINTR)
-                continue;
-            error("Poll returned -1");
-            break;
-        }
-        if (ret == 0)
-            continue;
-
-        size_t size = _pollFds.size();
-        for (size_t i = 0; i < size; i++)
-        {
-            if (_pollFds[i].revents == 0)
-                continue; // empty fd
-
-            int fd = _pollFds[i].fd;
-
-            if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
-            {
-                // closeClient(fd);
-                continue;
-            }
-            if (_fdToServer.count(fd) && (_pollFds[i].revents & POLLIN)) // new connection
-            {
-                // acceptClient(fd);
-                continue;
-            }
-            if (_fdToClient.count(fd)) // a client is actif
-            {
-                if (_pollFds[i].revents & POLLIN)
-                    // _fdToClient[fd]->readClient(fd);
-					std::cout << " _fdToClient[fd]->readClient(fd);" << std::endl;
-                if (_pollFds[i].revents & POLLOUT)
-                    // _fdToClient[fd]->writeClient(fd);
-					std::cout << "_fdToClient[fd]->writeClient(fd);" << std::endl;
-            }
-        }
-    }
-=======
 	while (true) //we'll need to handle signals
 	{
 		int ret = poll(_pollFds.data(), _pollFds.size(), -1); // timeout 5s
@@ -118,7 +73,6 @@ void Core::runPoll()
 			}
 		}
 	}
->>>>>>> origin/Core_mae
 }
 
 Core::~Core() {};

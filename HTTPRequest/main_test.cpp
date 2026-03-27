@@ -214,6 +214,16 @@ int main(int argc, char **argv)
 		"\r\n"
 	));
 
+	tests.push_back(std::make_pair(
+		"POST CGI python with body",
+		"POST /cgi-bin/test.py?name=michel HTTP/1.1\r\n"
+		"Host: localhost:8080\r\n"
+		"Content-Length: 11\r\n"
+		"Content-Type: text/plain\r\n"
+		"\r\n"
+		"hello world"
+	));
+
 	for (size_t i = 0; i < tests.size(); ++i)
 		runOneTest(server, tests[i].first, tests[i].second);
 

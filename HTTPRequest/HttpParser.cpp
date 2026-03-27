@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <cstdio>
+#include <cctype>
 
 // petit outil pour retirer espace au debut et a la fin 
 static std::string trim(const std::string& str)
@@ -16,6 +17,13 @@ static std::string trim(const std::string& str)
     while (end > start && (str[end - 1] == ' ' || str[end - 1] == '\t' || str[end - 1] == '\r'))
         end--;
     return str.substr(start, end - start);
+}
+
+static std::string toLowerString(std::string s)
+{
+    for (size_t i = 0; i < s.size(); ++i)
+        s[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(s[i])));
+    return s;
 }
 
 //separe uri en path et query
@@ -87,6 +95,7 @@ HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
         if (colonPos == std::string::npos)
             throw std::runtime_error("Invalid header line");
         std::string key = trim(line.substr(0, colonPos));
+        key = toLowerString(key);
         std::string value = trim(line.substr(colonPos + 1));
         request.headers[key] = value;
     }

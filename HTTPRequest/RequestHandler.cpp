@@ -189,13 +189,6 @@ static std::string resolveUploadBase(ServerConfig const& server, Location const*
 		return location->upload_dir;
 	return resolveRoot(server, location);
 }
-static std::string buildUploadPath(ServerConfig const& server, Location const* location)
-{
-	std::string base = resolveUploadBase(server, location);
-	if (!base.empty() && base[base.size() - 1] == '/')
-		return base + "upload.txt";
-	return base + "/upload.txt";
-}
 //verifie si le chemin existe
 static bool pathExists(std::string const& path)
 {
@@ -369,7 +362,7 @@ static std::string getCgiInterpreter(std::string const& extension, Location cons
 	return it->second;
 }
 //recuperer le nom du script pour cgi
-static std::string getScriptNname(std::string const& path, Location const* location)
+static std::string getScriptName(std::string const& path, Location const* location)
 {
 	if (location && locationMatches(path, location->path))
 	{
@@ -381,7 +374,7 @@ static std::string getScriptNname(std::string const& path, Location const* locat
 	return path;
 }
 //creation d'env pour cgi
-static char **builCgiEnv(HttpRequest const& request, ServerConfig const& server, Location const* location, std::string const& scriptPath, std::string const& interpreter)
+static char **buildCgiEnv(HttpRequest const& request, ServerConfig const& server, Location const* location, std::string const& scriptPath, std::string const& interpreter)
 {
 	(void)server;
 	(void)interpreter;
@@ -389,7 +382,7 @@ static char **builCgiEnv(HttpRequest const& request, ServerConfig const& server,
 	std::vector<std::string> envStrings;
 	std::vector<std::string> headers;
 	char **env;
-	std::string scriptName = getScriptNname(request.path, location);
+	std::string scriptName = getScriptName(request.path, location);
 	std::string contentLength = intToString(static_cast<int>(request.body.size()));
 
 	envStrings.push_back("REQUEST_METHOD=" + request.method);
@@ -399,18 +392,18 @@ static char **builCgiEnv(HttpRequest const& request, ServerConfig const& server,
 	envStrings.push_back("PATH_INFO=" + scriptName);
 	envStrings.push_back("CONTENT_LENGTH=" + contentLength);
 
-	if (request.headers.find("Content-Type") != request.headers.end())
-		envStrings.push_back("CONTENT_TYPE=" + request.headers.find("Content-Type")->second);
+	if (request.headers.find("content-type") != request.headers.end())
+		envStrings.push_back("CONTENT_TYPE=" + request.headers.find("content-type")->second);
 	else
 		envStrings.push_back("CONTENT_TYPE=");
 
-	if (request.headers.find("Host") != request.headers.end())
-		envStrings.push_back("HTTP_HOST=" + request.headers.find("Host")->second);
+	if (request.headers.find("host") != request.headers.end())
+		envStrings.push_back("HTTP_HOST=" + request.headers.find("host")->second);
 	else
 		envStrings.push_back("HTTP_HOST=");
 
 	envStrings.push_back("GATEWAY_INTERFACE=CGI/1.1");
-	envStrings.push_back("SERVER_PROTOCOL=HTTP1.1");
+	envStrings.push_back("SERVER_PROTOCOL=HTTP/1.1");
 	envStrings.push_back("REDIRECT_STATUS=200");
 
 	env = new char *[envStrings.size() + 1];
@@ -465,11 +458,10 @@ static bool executeCgi(HttpRequest const& request, ServerConfig const& server, L
 		return false;
 	}
 	pid = fork();
-	std::cerr << "fork ok, pid = " << pid << std::endl;
 	if (pid < 0)
 	{
 		close(inputPipe[0]);
-		close(inputPipe[0]);
+		close(inputPipe[1]);
 		close(outputPipe[0]);
 		close(outputPipe[1]);
 		return false;
@@ -486,13 +478,12 @@ static bool executeCgi(HttpRequest const& request, ServerConfig const& server, L
 		close(outputPipe[0]);
 		close(outputPipe[1]);
 
-		env = builCgiEnv(request, server, location, scriptPath, interpreter);
+		env = buildCgiEnv(request, server, location, scriptPath, interpreter);
 
 		argv[0] = const_cast<char *>(interpreter.c_str());
 		argv[1] = const_cast<char *>(scriptPath.c_str());
 		argv[2] = NULL;
 
-		std::cerr << "EXECVE: " << interpreter << " " << scriptPath << std::endl;
 		execve(argv[0], argv, env);
 		freeCgiEnv(env);
 		std::exit(1);
@@ -524,8 +515,121 @@ static bool executeCgi(HttpRequest const& request, ServerConfig const& server, L
 		return false;
 	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
 		return false;
-	std::cerr << "child status = " << status << std::endl;
 	return true;
+}
+//trim pour parser output cgi
+static std::string trimCgi(std::string const& str)
+{
+	size_t start = 0;
+	size_t end = str.size();
+
+	while (start < str.size()
+		&& (str[start] == ' ' || str[start] == '\t' || str[start] == '\r'))
+		++start;
+	while (end > start
+		&& (str[end - 1] == ' ' || str[end - 1] == '\t' || str[end - 1] == '\r'))
+		--end;
+	return str.substr(start, end - start);
+}
+//parsing du status code
+static int parseCgiStatusCode(std::string const& value)
+{
+	std::istringstream iss(value);
+	int code;
+
+	if (!(iss >> code))
+		return 200;
+	if (code < 100 || code > 599)
+		return 200;
+	return code;
+}
+//construire une reponse pour cgi
+static HttpResponse buildResponseFromCgiOutput(std::string const& cgiOutput)
+{
+	HttpResponse response;
+	size_t separatorPos;
+	std::string headerPart;
+	std::string bodyPart;
+	std::istringstream headerStream;
+	std::string line;
+
+	response.statusCode = 200;
+	response.reasonPhrase = getReasonPhrase(200);
+
+	separatorPos = cgiOutput.find("\r\n\r\n");
+	if (separatorPos != std::string::npos)
+	{
+		headerPart = cgiOutput.substr(0, separatorPos);
+		bodyPart = cgiOutput.substr(separatorPos + 4);
+	}
+	else
+	{
+		separatorPos = cgiOutput.find("\n\n");
+		if (separatorPos != std::string::npos)
+		{
+			headerPart = cgiOutput.substr(0, separatorPos);
+			bodyPart = cgiOutput.substr(separatorPos + 2);
+		}
+		else
+		{
+			response.headers["Content-Type"] = "text/plain";
+			response.body = cgiOutput;
+			return response;
+		}
+	}
+
+	headerStream.str(headerPart);
+	while (std::getline(headerStream, line))
+	{
+		if (!line.empty() && line[line.size() - 1] == '\r')
+			line.erase(line.size() - 1);
+
+		size_t colonPos = line.find(':');
+		if (colonPos == std::string::npos)
+			continue;
+
+		std::string key = trimCgi(line.substr(0, colonPos));
+		std::string value = trimCgi(line.substr(colonPos + 1));
+
+		if (key == "Status")
+		{
+			response.statusCode = parseCgiStatusCode(value);
+			response.reasonPhrase = getReasonPhrase(response.statusCode);
+		}
+		else
+			response.headers[key] = value;
+	}
+
+	if (response.headers.find("Content-Type") == response.headers.end())
+		response.headers["Content-Type"] = "text/plain";
+
+	response.body = bodyPart;
+	return response;
+}
+static std::string buildUniqueUploadPath(ServerConfig const& server, Location const* location)
+{
+	std::string base = resolveUploadBase(server, location);
+	std::string candidate;
+	int i = 0;
+
+	while (true)
+	{
+		if (!base.empty() && base[base.size() - 1] == '/')
+			candidate = base + "upload_" + intToString(i) + ".txt";
+		else
+			candidate = base + "/upload_" + intToString(i) + ".txt";
+		if (!pathExists(candidate))
+			return candidate;
+		++i;
+	}
+}
+static std::string extractFileName(std::string const& path)
+{
+	size_t pos = path.find_last_of('/');
+
+	if (pos == std::string::npos)
+		return path;
+	return path.substr(pos + 1);
 }
 //on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
@@ -580,12 +684,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 				return buildErrorResponse(server, 500, filePath);
 			if (!executeCgi(request, server, location, filePath, interpreter, CgiOutput))
 				return buildErrorResponse(server, 500, filePath);
-
-			response.statusCode = 200;
-			response.reasonPhrase = getReasonPhrase(200);
-			response.headers["Content-Type"] = "text/plain";
-			response.body = CgiOutput;
-			return response;
+			return buildResponseFromCgiOutput(CgiOutput);
 		}
 		if (isDirectory(filePath))
 		{
@@ -624,24 +723,48 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 
 	if (request.method == "POST")
 	{
-		std::string filePath = buildUploadPath(server, location);
+		std::string filePath;
+		std::string cgiOutput;
 
+		if (!buildFilePath(root, request.path, location, server, filePath))
+			return buildErrorResponse(server, 403, request.path);
+
+		if (isCgiRequest(filePath, location))
+		{
+			std::string extension = getFileExtension(filePath);
+			std::string interpreter = getCgiInterpreter(extension, location);
+
+			if (interpreter.empty())
+				return buildErrorResponse(server, 500, filePath);
+			if (!executeCgi(request, server, location, filePath, interpreter, cgiOutput))
+				return buildErrorResponse(server, 500, filePath);
+			return buildResponseFromCgiOutput(cgiOutput);
+		}
+
+		filePath = buildUniqueUploadPath(server, location);
 		if (!writeFileContent(filePath, request.body))
 			return buildErrorResponse(server, 500, filePath);
+
+		std::string fileName = extractFileName(filePath);
+		std::string locationHeader;
+
+		if (location && !location->path.empty())
+		{
+			if (location->path[location->path.size() - 1] == '/')
+				locationHeader = location->path + fileName;
+			else
+				locationHeader = location->path + "/" + fileName;
+		}
+		else
+			locationHeader = "/" + fileName;
 
 		response.statusCode = 201;
 		response.reasonPhrase = "Created";
 		response.headers["Content-Type"] = "text/plain";
-		response.body = "File created at: " + filePath + "\n";
+		response.headers["Location"] = locationHeader;
+		response.body = "File created at: " + locationHeader + "\n";
 		return response;
 	}
-
-	// TODO:
-// Le fichier d'upload utilise encore un nom fixe "upload.txt".
-// Améliorations possibles:
-// - générer un nom unique
-// - utiliser un nom fourni par la requête si vous l’implémentez plus tard
-// - éviter que plusieurs POST écrasent le même fichier
 
 	if (request.method == "DELETE")
 	{
@@ -661,18 +784,3 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 	}
 	return buildErrorResponse(server, 500);
 }
-
-// TODO:
-// Cette fonction n'utilise pas encore pleinement la configuration issue de ServerConfig et Location.
-//
-// Problèmes actuels:
-//
-// 5. CGI:
-//    Les fichiers CGI sont détectés,
-//    mais ne sont pas encore exécutés.
-//    Il faut encore lancer l'interpréteur avec fork/execve
-//    et récupérer la sortie du script.
-//
-// Conclusion:
-//    La config est bien parsée mais pas encore réellement appliquée ici.
-//nico
