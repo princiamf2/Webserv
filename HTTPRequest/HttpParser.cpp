@@ -3,6 +3,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <cstdio>
 
 // petit outil pour retirer espace au debut et a la fin 
 static std::string trim(const std::string& str)
