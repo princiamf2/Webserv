@@ -55,6 +55,8 @@ void Core::runPoll()
 			if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
 			{
 				closeClient(fd);
+				size--;
+				i--;
 				continue;
 			}
 			if (_fdToServer.count(fd) && (_pollFds[i].revents & POLLIN)) // new connection
@@ -71,6 +73,9 @@ void Core::runPoll()
 			}
 			if (_fdToClient[fd]->clientHasData(fd))
 				_pollFds[i].events |= POLLOUT;
+
+			if (_fdToClient[fd]->clientToClose(fd))
+				closeClient(fd);
 
 		}
 	}
