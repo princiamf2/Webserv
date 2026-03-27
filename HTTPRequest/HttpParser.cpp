@@ -3,6 +3,17 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <cstdio>
+
+static std::string toLower(std::string s)
+{
+    for (size_t i = 0; i < s.size(); ++i)
+    {
+        if (s[i] >= 'A' && s[i] <= 'Z')
+            s[i] = s[i] - 'A' + 'a';
+    }
+    return s;
+}
 
 // petit outil pour retirer espace au debut et a la fin 
 static std::string trim(const std::string& str)
@@ -65,8 +76,11 @@ HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
         line.erase(line.size() - 1);//si il a '\r' je l'enleve
 
     std::istringstream requestLine(line);//je transforme la ligne en flux 
-    if (!(requestLine >> request.method >> request.uri >> request.version))//je mets chaque partie de la line ou il faut car une requete doit toujours commecer par la method le uri et la version
-        throw std::runtime_error("Invalid HTTP request line");             //pour le moment je verifie pas si les methode sont corect etc...
+    if (!(requestLine >> request.method >> request.uri >> request.version))
+        throw std::runtime_error("Invalid HTTP request line");
+    requestLine >> std::ws;
+    if (requestLine.peek() != EOF)
+        throw std::runtime_error("Invalid HTTP request line");//pour le moment je verifie pas si les methode sont corect etc...
 
     splitUri(request.uri, request.path, request.query);
     if (request.path.empty())
@@ -84,12 +98,13 @@ HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
             throw std::runtime_error("Invalid header line");
         std::string key = trim(line.substr(0, colonPos));
         std::string value = trim(line.substr(colonPos + 1));
+        key = toLower(key);
         request.headers[key] = value;
     }
     if (request.version == "HTTP/1.1"
-        && request.headers.find("Host") == request.headers.end())
+        && request.headers.find("host") == request.headers.end())
         throw std::runtime_error("Invalid HTTP request: missing Host header");
-    std::map<std::string, std::string>::const_iterator it = request.headers.find("Content-Length");
+    std::map<std::string, std::string>::const_iterator it = request.headers.find("content-length");
     if (it != request.headers.end())
     {
         size_t expected = HttpParserContentLength(it->second);
