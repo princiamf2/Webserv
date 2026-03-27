@@ -132,6 +132,12 @@ static bool parseLocation_Methods(std::istringstream& locationStream, Location& 
             return false;
         }
 
+        if (location.allowed_methods_http.find(method) != location.allowed_methods_http.end())
+        {
+            std::cerr << "ERROR: DOUBLE METHOD " << method << std::endl;
+            return false;
+        }
+
         location.allowed_methods_http.insert(method);
     }
 
@@ -350,6 +356,12 @@ static bool parseLocation_CgiExtensions(std::istringstream& locationStream, Loca
         if (cgi_extension[0] != '.')
         {
             std::cerr << "ERROR: CGI EXTENSION MUST START BY '.': " << cgi_extension << std::endl;
+            return false;
+        }
+
+        if (location.cgi_extensions.find(cgi_extension) != location.cgi_extensions.end())
+        {
+            std::cerr << "ERROR: DOUBLE CGI EXTENSION " << cgi_extension << std::endl;
             return false;
         }
 
