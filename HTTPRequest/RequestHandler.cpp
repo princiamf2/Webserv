@@ -1,12 +1,20 @@
 #include "RequestHandler.hpp"
+#include "HttpRequest.hpp"
 #include <cstddef>
+#include <cstring>
+#include <iostream>
 #include <sstream>
 #include <fstream>
 #include <string>
 #include <cstdio>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <sys/types.h>
 #include <vector>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <cstdlib>
+#include <cerrno>
 
 //petit check de la taile du body
 static bool isBodySizeValid(HttpRequest const& request, ServerConfig const& server)
@@ -84,29 +92,31 @@ static bool locationMatches(std::string const& requestPath, std::string const& l
 	return false;
 }
 //construit le path
-static bool buildFilePath(std::string const& root, std::string const& path, Location const* location, ServerConfig const& server, std::string& filePath)
+static bool buildFilePath(std::string const& root,
+	std::string const& path,
+	Location const* location,
+	ServerConfig const& server,
+	std::string& filePath)
 {
-    std::string relativePath = path;
+	std::string relativePath = path;
 	std::string normalizedPath;
 
-    if (location && locationMatches(path, location->path))
+	(void)server;
+
+	if (location && locationMatches(path, location->path))
 		relativePath = path.substr(location->path.size());
-    if (relativePath.empty() || relativePath == "/")
-    {
-        if (location && !location->index.empty())
-            relativePath = "/" + location->index;
-        else if (!server.index.empty())
-            relativePath = "/" + server.index;
-        else
-            relativePath = "/index.html";
-    }
+
+	if (relativePath.empty())
+		relativePath = "/";
+
 	if (!normalizeRelativePath(relativePath, normalizedPath))
 		return false;
+
 	if (!root.empty() && root[root.size() - 1] == '/')
 		filePath = root.substr(0, root.size() - 1) + normalizedPath;
 	else
 		filePath = root + normalizedPath;
-    return true;
+	return true;
 }
 
 // TODO:
@@ -358,7 +368,165 @@ static std::string getCgiInterpreter(std::string const& extension, Location cons
 		return "";
 	return it->second;
 }
+//recuperer le nom du script pour cgi
+static std::string getScriptNname(std::string const& path, Location const* location)
+{
+	if (location && locationMatches(path, location->path))
+	{
+		std::string scriptName = path.substr(location->path.size());
+		if (scriptName.empty())
+			return "/";
+		return scriptName;
+	}
+	return path;
+}
+//creation d'env pour cgi
+static char **builCgiEnv(HttpRequest const& request, ServerConfig const& server, Location const* location, std::string const& scriptPath, std::string const& interpreter)
+{
+	(void)server;
+	(void)interpreter;
 
+	std::vector<std::string> envStrings;
+	std::vector<std::string> headers;
+	char **env;
+	std::string scriptName = getScriptNname(request.path, location);
+	std::string contentLength = intToString(static_cast<int>(request.body.size()));
+
+	envStrings.push_back("REQUEST_METHOD=" + request.method);
+	envStrings.push_back("QUERY_STRING=" + request.query);
+	envStrings.push_back("SCRIPT_NAME=" + scriptName);
+	envStrings.push_back("SCRIPT_FILENAME=" + scriptPath);
+	envStrings.push_back("PATH_INFO=" + scriptName);
+	envStrings.push_back("CONTENT_LENGTH=" + contentLength);
+
+	if (request.headers.find("Content-Type") != request.headers.end())
+		envStrings.push_back("CONTENT_TYPE=" + request.headers.find("Content-Type")->second);
+	else
+		envStrings.push_back("CONTENT_TYPE=");
+
+	if (request.headers.find("Host") != request.headers.end())
+		envStrings.push_back("HTTP_HOST=" + request.headers.find("Host")->second);
+	else
+		envStrings.push_back("HTTP_HOST=");
+
+	envStrings.push_back("GATEWAY_INTERFACE=CGI/1.1");
+	envStrings.push_back("SERVER_PROTOCOL=HTTP1.1");
+	envStrings.push_back("REDIRECT_STATUS=200");
+
+	env = new char *[envStrings.size() + 1];
+	for (size_t i = 0; i < envStrings.size(); ++i)
+	{
+		env[i] = new char[envStrings[i].size() + 1];
+		std::strcpy(env[i], envStrings[i].c_str());
+	}
+	env[envStrings.size()] = NULL;
+	return env;
+}
+//comme son nom l'indique
+static void freeCgiEnv(char **env)
+{
+	size_t i = 0;
+
+	if (!env)
+		return;
+	while (env[i])
+	{
+		delete[] env[i];
+		++i;
+	}
+	delete[] env;
+}
+//lire le fd dans le cgi
+static bool readAllFromFd(int fd, std::string& output)
+{
+	char buffer[1024];
+	ssize_t bytesRead;
+
+	output.clear();
+	while ((bytesRead = read(fd, buffer, sizeof(buffer))) > 0)
+		output.append(buffer, bytesRead);
+	return (bytesRead >= 0);
+}
+//execution du cgi
+static bool executeCgi(HttpRequest const& request, ServerConfig const& server, Location const* location, std::string const& scriptPath, std::string const& interpreter, std::string& output)
+{
+	int inputPipe[2];
+	int outputPipe[2];
+	pid_t pid;
+	int status;
+	char **env = NULL;
+
+	if (pipe(inputPipe) == -1)
+		return false;
+	if (pipe(outputPipe) == -1)
+	{
+		close(inputPipe[0]);
+		close(inputPipe[1]);
+		return false;
+	}
+	pid = fork();
+	std::cerr << "fork ok, pid = " << pid << std::endl;
+	if (pid < 0)
+	{
+		close(inputPipe[0]);
+		close(inputPipe[0]);
+		close(outputPipe[0]);
+		close(outputPipe[1]);
+		return false;
+	}
+	if (pid == 0)
+	{
+		char *argv[3];
+
+		dup2(inputPipe[0], STDIN_FILENO);
+		dup2(outputPipe[1], STDOUT_FILENO);
+
+		close(inputPipe[0]);
+		close(inputPipe[1]);
+		close(outputPipe[0]);
+		close(outputPipe[1]);
+
+		env = builCgiEnv(request, server, location, scriptPath, interpreter);
+
+		argv[0] = const_cast<char *>(interpreter.c_str());
+		argv[1] = const_cast<char *>(scriptPath.c_str());
+		argv[2] = NULL;
+
+		std::cerr << "EXECVE: " << interpreter << " " << scriptPath << std::endl;
+		execve(argv[0], argv, env);
+		freeCgiEnv(env);
+		std::exit(1);
+	}
+	close(inputPipe[0]);
+	close(outputPipe[1]);
+	if (!request.body.empty())
+	{
+		ssize_t writter = write(inputPipe[1], request.body.c_str(), request.body.size());
+		if (writter < 0 || static_cast<size_t>(writter) != request.body.size())
+		{
+			close(inputPipe[1]);
+			close(outputPipe[0]);
+			waitpid(pid, NULL, 0);
+			return false;
+		}
+	}
+	close(inputPipe[1]);
+
+	if (!readAllFromFd(outputPipe[0], output))
+	{
+		close(outputPipe[0]);
+		waitpid(pid, NULL, 0);
+		return false;
+	}
+	close(outputPipe[0]);
+
+	if (waitpid(pid, &status, 0) < 0)
+		return false;
+	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+		return false;
+	std::cerr << "child status = " << status << std::endl;
+	return true;
+}
 //on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
 {
@@ -406,17 +574,17 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		{
 			std::string extension = getFileExtension(filePath);
 			std::string interpreter = getCgiInterpreter(extension, location);
+			std::string CgiOutput;
 
 			if (interpreter.empty())
+				return buildErrorResponse(server, 500, filePath);
+			if (!executeCgi(request, server, location, filePath, interpreter, CgiOutput))
 				return buildErrorResponse(server, 500, filePath);
 
 			response.statusCode = 200;
 			response.reasonPhrase = getReasonPhrase(200);
 			response.headers["Content-Type"] = "text/plain";
-			response.body = "CGI detected\n";
-			response.body += "script: " + filePath + "\n";
-			response.body += "extension: " + extension + "\n";
-			response.body += "interpreter: " + interpreter + "\n";
+			response.body = CgiOutput;
 			return response;
 		}
 		if (isDirectory(filePath))
