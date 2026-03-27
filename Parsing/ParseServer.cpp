@@ -9,12 +9,12 @@ bool parseServer_Listen(std::istringstream& lineStream, ServerConfig& server)
 
 	if (port_str.empty())
 	{
-		std::cerr << "ERROR: NO listen port" << std::endl;
+		std::cerr << "ERROR: NO LISTEN PORT" << std::endl;
 		return false;
 	}
 	if (!stripSemicolon(port_str, port_str))
 	{
-		std::cerr << "ERROR: WRONG listen syntax" << std::endl;
+		std::cerr << "ERROR: WRONG LISTEN SYNTAX" << std::endl;
 		return false;
 	}
 
@@ -23,20 +23,20 @@ bool parseServer_Listen(std::istringstream& lineStream, ServerConfig& server)
 
 	if (!(in_string_stream >> port))
 	{
-		std::cerr << "ERROR: WRONG port number: " << port_str << std::endl;
+		std::cerr << "ERROR: WRONG PORT NUMBER: " << port_str << std::endl;
 		return false;
 	}
 
 	in_string_stream >> std::ws;
 	if (in_string_stream.peek() != std::char_traits<char>::eof())
 	{
-		std::cerr << "ERROR: WRONG port number: " << port_str << std::endl;
+		std::cerr << "ERROR: WRONG PORT NUMBER: " << port_str << std::endl;
 		return false;
 	}
 
 	if (port < 1 || port > 65535)
 	{
-		std::cerr << "ERROR: port must be between 1-65535: " << port << std::endl;
+		std::cerr << "ERROR: PORT MUST BE BETWEEN 1-65535: " << port << std::endl;
 		return false;
 	}
 
@@ -55,38 +55,38 @@ static bool parseServer_Root(std::istringstream& lineStream, ServerConfig& serve
 {
     if (!server.root.empty())
     {
-        std::cerr << "ERROR: DOUBLE root" << std::endl;
+        std::cerr << "ERROR: DOUBLE ROOT" << std::endl;
         return false;
     }
 
     std::string value;
     if (!(lineStream >> value))
     {
-        std::cerr << "ERROR: NO root" << std::endl;
+        std::cerr << "ERROR: NO ROOT" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(value, value))
     {
-        std::cerr << "ERROR: WRONG root syntax" << std::endl;
+        std::cerr << "ERROR: WRONG ROOT SYNTAX" << std::endl;
         return false;
     }
 
     if (value.empty())
     {
-        std::cerr << "ERROR: WRONG root" << std::endl;
+        std::cerr << "ERROR: WRONG ROOT" << std::endl;
         return false;
     }
 
     if (value[0] != '/')
     {
-        std::cerr << "ERROR:root must start by '/'" << std::endl;
+        std::cerr << "ERROR: ROOT MUST START BY '/'" << std::endl;
         return false;
     }
 
     if (value.find("..") != std::string::npos)
     {
-        std::cerr << "ERROR: root cannot contain '..'" << std::endl;
+        std::cerr << "ERROR: ROOT CANNOT CONTAIN '..'" << std::endl;
         return false;
     }
 
@@ -107,19 +107,19 @@ static bool parseServer_DomainName(std::istringstream& lineStream, ServerConfig&
 
     if (!(lineStream >> domain_name))
     {
-        std::cerr << "ERROR: NO domain_name" << std::endl;
+        std::cerr << "ERROR: NO DOMAIN_NAME" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(domain_name, domain_name))
     {
-        std::cerr << "ERROR: WRONG domain_name syntax" << std::endl;
+        std::cerr << "ERROR: WRONG DOMAIN_NAME SYNTAX" << std::endl;
         return false;
     }
 
     if (domain_name.empty())
     {
-        std::cerr << "ERROR: WRONG domain_name" << std::endl;
+        std::cerr << "ERROR: WRONG DOMAIN_NAME" << std::endl;
         return false;
     }
 
@@ -138,26 +138,26 @@ static bool parseServer_Index(std::istringstream& lineStream, ServerConfig& serv
 {
     if (!server.index.empty())
     {
-        std::cerr << "ERROR: DOUBLE index" << std::endl;
+        std::cerr << "ERROR: DOUBLE INDEX" << std::endl;
         return false;
     }
 
     std::string index_file;
     if (!(lineStream >> index_file))
     {
-        std::cerr << "ERROR: NO index" << std::endl;
+        std::cerr << "ERROR: NO INDEX" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(index_file, index_file))
     {
-        std::cerr << "ERROR: WRONG index syntax" << std::endl;
+        std::cerr << "ERROR: WRONG INDEX SYNTAX" << std::endl;
         return false;
     }
 
     if (index_file.empty())
     {
-        std::cerr << "ERROR: WRONG index" << std::endl;
+        std::cerr << "ERROR: WRONG INDEX" << std::endl;
         return false;
     }
 
@@ -180,31 +180,31 @@ static bool parseServer_ErrorPage(std::istringstream& lineStream, ServerConfig& 
 
     if (!(lineStream >> code_error_str >> path_error))
     {
-        std::cerr << "ERROR: NO error_page values" << std::endl;
+        std::cerr << "ERROR: NO ERROR_PAGE VALUES" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(path_error, path_error))
     {
-        std::cerr << "ERROR: WRONG error_page path syntax" << std::endl;
+        std::cerr << "ERROR: WRONG ERROR_PAGE PATH SYNTAX" << std::endl;
         return false;
     }
 
     if (path_error.empty())
     {
-        std::cerr << "ERROR: WRONG error_page path" << std::endl;
+        std::cerr << "ERROR: WRONG ERROR_PAGE PATH" << std::endl;
         return false;
     }
 
     if (path_error[0] != '/')
     {
-        std::cerr << "ERROR: WRONG error_page path must start with '/'" << std::endl;
+        std::cerr << "ERROR: WRONG ERROR_PAGE PATH MUST START BY '/'" << std::endl;
         return false;
     }
 
     if (path_error.find("..") != std::string::npos)
     {
-        std::cerr << "ERROR: WRONG error_page path cannot contain '..'" << std::endl;
+        std::cerr << "ERROR: WRONG ERROR_PAGE PATH CANNOT CONTAIN '..'" << std::endl;
         return false;
     }
 
@@ -213,27 +213,27 @@ static bool parseServer_ErrorPage(std::istringstream& lineStream, ServerConfig& 
 
     if (!(in_string_stream >> code_error))
     {
-        std::cerr << "ERROR: WRONG error code: " << code_error_str << std::endl;
+        std::cerr << "ERROR: WRONG ERROR CODE: " << code_error_str << std::endl;
         return false;
     }
 
     in_string_stream >> std::ws;
     if (in_string_stream.peek() != std::char_traits<char>::eof())
     {
-        std::cerr << "ERROR: WRONG error code: " << code_error_str << std::endl;
+        std::cerr << "ERROR: WRONG ERROR CODE: " << code_error_str << std::endl;
         return false;
     }
 
     if (code_error < 100 || code_error > 599)
     {
-        std::cerr << "ERROR: WRONG error code must be between 100-599: " << code_error << std::endl;
+        std::cerr << "ERROR: WRONG ERROR CODE MUST BE BETWEEN 100-599: " << code_error << std::endl;
         return false;
     }
 
     std::string extra;
     if (lineStream >> extra)
     {
-        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER error_page: " << extra << std::endl;
+        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER ERROR_PAGE: " << extra << std::endl;
         return false;
     }
 
@@ -245,20 +245,20 @@ static bool parseServer_ClientMaxBodySize(std::istringstream& lineStream, Server
 {
     if (server.client_max_body_size_set)
     {
-        std::cerr << "ERROR: DOUBLE client_max_body_size directive" << std::endl;
+        std::cerr << "ERROR: DOUBLE CLIENT_MAX_BODY_SIZE" << std::endl;
         return false;
     }
 
     std::string size_str;
     if (!(lineStream >> size_str))
     {
-        std::cerr << "ERROR: NO client_max_body_size" << std::endl;
+        std::cerr << "ERROR: NO CLIENT_MAX_BODY_SIZE" << std::endl;
         return false;
     }
 
     if (!stripSemicolon(size_str, size_str))
     {
-        std::cerr << "ERROR: WRONG client_max_body_size syntax" << std::endl;
+        std::cerr << "ERROR: WRONG CLIENT_MAX_BODY_SIZE SYNTAX" << std::endl;
         return false;
     }
 
@@ -267,27 +267,27 @@ static bool parseServer_ClientMaxBodySize(std::istringstream& lineStream, Server
 
     if (!(in_string_stream >> size))
     {
-        std::cerr << "ERROR: WRONG client_max_body_size: " << size_str << std::endl;
+        std::cerr << "ERROR: WRONG CLIENT_MAX_BODY_SIZE: " << size_str << std::endl;
         return false;
     }
 
     in_string_stream >> std::ws;
     if (in_string_stream.peek() != std::char_traits<char>::eof())
     {
-        std::cerr << "ERROR: WRONG client_max_body_size: " << size_str << std::endl;
+        std::cerr << "ERROR: WRONG CLIENT_MAX_BODY_SIZE: " << size_str << std::endl;
         return false;
     }
 
     if (size <= 0)
     {
-        std::cerr << "ERROR: client_max_body_size must be > 0: " << size << std::endl;
+        std::cerr << "ERROR: CLIENT_MAX_BODY_SIZE MUST BE > 0: " << size << std::endl;
         return false;
     }
 
     std::string extra;
     if (lineStream >> extra)
     {
-        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER client_max_body_size: " << extra << std::endl;
+        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER CLIENT_MAX_BODY_SIZE: " << extra << std::endl;
         return false;
     }
 
@@ -349,23 +349,23 @@ bool parseServer(std::istringstream& stream, ServerConfig& server) //parse un se
 		}
 		else
 		{
-			std::cerr << "ERROR: UNKNOWN server directive: " << word_to_parse << std::endl;
+			std::cerr << "ERROR: UNKNOWN SERVER DIRECTIVE: " << word_to_parse << std::endl;
 			return false;
 		}
 	}
 	if (!closed)
 	{
-		std::cerr << "ERROR: NOT closed by }" << std::endl;
+		std::cerr << "ERROR: NOT CLOSED BY }" << std::endl;
 		return false;
 	}
 	if (server.listen_ports.empty())
 	{
-    	std::cerr << "ERROR: server has no listen directive" << std::endl;
+    	std::cerr << "ERROR: SERVER HAS NO LISTEN DIRECTIVE" << std::endl;
     	return false;
 	}
 	if (server.root.empty())
 	{
-		std::cerr << "ERROR: server has no root directive" << std::endl;
+		std::cerr << "ERROR: SERVER HAS NO ROOT DIRECTIVE" << std::endl;
 		return false;
 	}
 	return true;
