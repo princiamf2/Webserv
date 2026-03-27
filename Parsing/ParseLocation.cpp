@@ -164,14 +164,22 @@ static bool parseLocation_CgiInterpreter(std::istringstream& locationStream, Loc
         std::cerr << "Error: missing CGI interpreter value" << std::endl;
         return false;
     }
+
     extension = stripSemicolon(extension);
     interpreter = stripSemicolon(interpreter);
+
+    if (extension.empty() || extension[0] != '.')
+    {
+        std::cerr << "Error: invalid CGI extension" << std::endl;
+        return false;
+    }
 
     if (interpreter.empty())
     {
         std::cerr << "Error: invalid CGI interpreter" << std::endl;
         return false;
     }
+
     location.cgi_extensions.insert(extension);
     location.cgi_interpreters[extension] = interpreter;
     return true;
