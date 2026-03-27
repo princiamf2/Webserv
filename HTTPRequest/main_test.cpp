@@ -154,7 +154,7 @@ int main(int argc, char **argv)
 	// ----------- DELETE -----------
 	tests.push_back(std::make_pair(
 		"DELETE existing upload file",
-		"DELETE /upload/upload.txt HTTP/1.1\r\n"
+		"DELETE /upload/upload_0.txt HTTP/1.1\r\n"
 		"Host: localhost:8080\r\n"
 		"\r\n"
 	));
