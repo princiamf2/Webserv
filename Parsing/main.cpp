@@ -21,6 +21,13 @@ void print_parse_location(Location const &loc, size_t j) //affiche les informati
          iter != loc.cgi_extensions.end(); ++iter)
         std::cout << *iter << " ";
     std::cout << std::endl;
+    std::cout << "  - cgi_interpreters: ";
+    for (std::map<std::string, std::string>::const_iterator iter = loc.cgi_interpreters.begin();
+        iter != loc.cgi_interpreters.end(); ++iter)
+    {
+        std::cout << "(" << iter->first << " -> " << iter->second << ") ";
+    }
+    std::cout << std::endl;   
 }
 
 void print_parse_server(ServerConfig const &server, size_t i)
