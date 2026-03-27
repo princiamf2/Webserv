@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <poll.h>
 #include <cstring>
+#include <unistd.h>
 
 #include "colors.hpp"
 #include "../Parsing/Location.hpp"
@@ -50,6 +51,8 @@ class Server
 
 	public:
 		Server(ServerConfig serv);
+		Server(const Server& other);
+		Server& operator=(const Server& other);
 		~Server();
 		int         init(void);                         // init of the binds listen etc
 		void        addClient(int fd);                  // add a client to fds list
@@ -57,8 +60,9 @@ class Server
 		void        readClient(int fd);                 // read what client sent
 		void        writeClient(int fd);                // write to the client
 		void        closeClient(int fd);                // close connection to client
-		bool        clientHasData(int fd);               // does a responce for the client exist
+		bool        clientHasData(int fd);              // does a responce for the client exist
 		std::vector<int>& getListenFds(void);           // getter for fds
+		bool        clientToClose(int fd);              // getter pour les toClose
 		void debug();
 };
 

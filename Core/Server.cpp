@@ -15,6 +15,40 @@ Server::Server(ServerConfig serv)
 	_autoindex = false;
 }
 
+Server::Server(const Server& other)
+	: _conf(other._conf),
+	_host(other._host),
+	_ports(other._ports),
+	_domainNames(other._domainNames),
+	_root(other._root),
+	_index(other._index),
+	_errorPages(other._errorPages),
+	_clientMaxBodySize(other._clientMaxBodySize),
+	_locations(other._locations),
+	_listenFds(other._listenFds),
+	_clients(other._clients),
+	_autoindex(other._autoindex)
+{}
+
+Server& Server::operator=(const Server& other)
+{
+	if (this == &other)
+		return (*this);
+	_conf = other._conf;
+	_host = other._host;
+	_ports = other._ports;
+	_domainNames = other._domainNames;
+	_root = other._root;
+	_index = other._index;
+	_errorPages = other._errorPages;
+	_clientMaxBodySize = other._clientMaxBodySize;
+	_locations = other._locations;
+	_autoindex = other._autoindex;
+	_listenFds = other._listenFds;
+	_clients = other._clients;
+	return (*this);
+}
+
 int Server::init(void)
 {
 	for (std::set<unsigned int>::iterator it = _ports.begin(); it != _ports.end(); ++it)
@@ -46,6 +80,7 @@ void Server::addClient(int fd)
 {
 	Client c;
 	c.fd = fd;
+	c.toClose = false;
 	_clients[fd] = c;
 }
 
@@ -99,9 +134,13 @@ bool Server::clientHasData(int fd)
 {
 	return (!_clients[fd].writeBuf.empty());
 }
+
 Server::~Server()
 {
-	//deletes?
+//	for (size_t i = 0; i < _listenFds.size(); i++)
+//		close(_listenFds[i]); // close listen socket
+//	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+//		close(it->first); // close clients
 }
 
 std::vector<int>& Server::getListenFds(void)
@@ -109,6 +148,10 @@ std::vector<int>& Server::getListenFds(void)
 	return (_listenFds);
 }
 
+bool Server::clientToClose(int fd)
+{
+	return (_clients[fd].toClose);
+}
 
 void Server::debug()
 {
