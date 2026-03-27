@@ -2,6 +2,7 @@
 
 Server::Server(ServerConfig serv)
 {
+	_conf = serv;
 	_host = "127.0.0.1";
 	_ports = serv.listen_ports; //ports d'ecoute
 	_domainNames = serv.domain_names; //noms de domaine
@@ -10,7 +11,7 @@ Server::Server(ServerConfig serv)
 	_errorPages = serv.error_pages; //code d'erreur + chemin (page 404 par exemple)
 	_clientMaxBodySize = serv.client_max_body_size; //taille max du corps de la requete
 	_locations = serv.locations; //liste des locations pour ce serveur
-	// _listenFds; // un fd par port après socket()+bind()+listen(), remplis par init
+	// _listenFds; // un fd par port apres socket()+bind()+listen(), remplis par init
 	_autoindex = false;
 }
 
@@ -27,8 +28,8 @@ int Server::init(void)
 
 		struct sockaddr_in addr;
 		memset(&addr, 0, sizeof(addr));
-		addr.sin_family	  = AF_INET;
-		addr.sin_port		= htons(*it);
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(*it);
 		addr.sin_addr.s_addr = inet_addr(_host.c_str());
 
 		if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
@@ -41,6 +42,63 @@ int Server::init(void)
 	return (SUCCESS);
 }
 
+void Server::addClient(int fd)
+{
+	Client c;
+	c.fd = fd;
+	_clients[fd] = c;
+}
+
+void Server::removeClient(int fd)
+{
+	_clients.erase(fd);
+}
+
+void Server::readClient(int fd)
+{
+	char	buf[4096];
+	ssize_t bytes = recv(fd, buf, sizeof(buf), 0);
+
+	if (bytes <= 0) // 0 = déconnexion, -1 = erreur
+	{
+		_clients[fd].toClose = true; // TODO to handle
+		return ;
+	}
+
+	_clients[fd].readBuf.append(buf, bytes);
+
+	if (_clients[fd].readBuf.find("\r\n\r\n") != std::string::npos)
+	{
+		std::string response = handleRawHttpRequest(_clients[fd].readBuf, _conf);
+	//		"HTTP/1.1 200 OK\r\n"
+	//		"Content-Length: 13\r\n"
+	//		"Content-Type: text/plain\r\n"
+	//		"\r\n"
+	//		"Hello World!\n";
+		_clients[fd].writeBuf = response;
+		_clients[fd].readBuf.clear();
+	}
+}
+
+void Server::writeClient(int fd)
+{
+	if (_clients[fd].writeBuf.empty())
+		return ;
+
+	ssize_t bytes = send(fd, _clients[fd].writeBuf.c_str(),
+							 _clients[fd].writeBuf.size(), 0);
+	if (bytes == -1)
+	{
+		_clients[fd].toClose = true;
+		return ;
+	}
+	_clients[fd].writeBuf.erase(0, bytes); // remove only added bytes
+}
+
+bool Server::clientHasData(int fd)
+{
+	return (!_clients[fd].writeBuf.empty());
+}
 Server::~Server()
 {
 	//deletes?
@@ -88,68 +146,3 @@ void Server::debug()
 
 
 
-
-
-
-
-
-
-
-
-
-/*
-int Server::loop(void)
-{
-	while (true)
-	{
-		int nReady = poll(_pollFds.data(), _pollFds.size(), -1); // wait for events
-		if (nReady < 0)
-		{
-			if (errno == EINTR)
-				continue;
-			throw std::runtime_error("poll() failed");
-		}
-		size_t size = _pollFds.size();
-
-		for (size_t i = 0; i < size; i++)
-		{
-			if (_pollFds[i].revents == 0)
-				continue; // Rien sur le fd
-			int fd = _pollFds[i].fd;
-			// ── Cas 1 : Erreur ou déconnexion ─────────────────────────
-			if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
-			{
-				// close_client(fd);
-				;
-				continue;
-			}
-			// ── Cas 2 : Socket d'écoute → nouvelle connexion ──────────
-			// if (is_listen_fd(fd) && (_pollFds[i].revents & POLLIN))
-			// {
-				// accept_new_client(fd);
-				// continue;
-			// }
-			// ── Cas 3 : Socket client → lecture ───────────────────────
-			if (_pollFds[i].revents & POLLIN)
-			{
-				// read_from_client(fd);
-				;
-			}
-
-			// ── Cas 4 : Socket client → écriture ──────────────────────
-			if (_pollFds[i].revents & POLLOUT)
-			{
-				// write_to_client(fd);
-				;
-			}
-			(void)fd;
-		}
-
-		// ─── Phase 3 : Nettoyage des fds marqués ───────────────────────
-		// cleanup_closed_fds();
-
-	}
-	return (SUCCESS);
-}
-
-*/
