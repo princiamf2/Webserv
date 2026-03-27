@@ -1,6 +1,9 @@
 
+#include "Location.hpp"
 #include "ParseConfig.hpp"
 #include <iostream> //on en aura besoin pour afficher les erreurs et infos (cerr et cout)
+#include <ostream>
+#include <sstream>
 
 static bool parseLocation_Root(std::istringstream& locationStream, Location& location)
 {
@@ -151,6 +154,29 @@ static bool parseLocation_CgiExtensions(std::istringstream& locationStream, Loca
     return true;
 }
 
+static bool parseLocation_CgiInterpreter(std::istringstream& locationStream, Location& location)
+{
+    std::string extension;
+    std::string interpreter;
+
+    if (!(locationStream >> extension >> interpreter))
+    {
+        std::cerr << "Error: missing CGI interpreter value" << std::endl;
+        return false;
+    }
+    extension = stripSemicolon(extension);
+    interpreter = stripSemicolon(interpreter);
+
+    if (interpreter.empty())
+    {
+        std::cerr << "Error: invalid CGI interpreter" << std::endl;
+        return false;
+    }
+    location.cgi_extensions.insert(extension);
+    location.cgi_interpreters[extension] = interpreter;
+    return true;
+}
+
 bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, ServerConfig& server) //parse une location et l'ajoute a la liste des locations du serveur
 {
     Location location;
@@ -218,6 +244,11 @@ bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, S
 			if (!parseLocation_CgiExtensions(locationStream, location))
 				return false;
 		}
+        else if (location_word == "cgi_interpreter")
+        {
+            if (!parseLocation_CgiInterpreter(locationStream, location))
+                return false;
+        }
 		else
 		{
 			std::cerr << "Error: unknown location directive: " << location_word << std::endl;
