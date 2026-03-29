@@ -34,7 +34,7 @@ static std::string resolveRoot(ServerConfig const& server, Location const* locat
 //petit outil qui check les methods si la method on la supporte
 static bool isSupportedMethod(std::string const& method)
 {
-    return (method == "GET" || method == "POST" || method == "DELETE");
+    return (method == "GET" || method == "HEAD" || method == "POST" || method == "DELETE");
 }
 //petit outil qui check si la methode et autoriser dans une location
 static bool isMethodAllowed(std::string const& method, Location const* location)
@@ -367,6 +367,18 @@ static std::string extractFileName(std::string const& path)
 		return path;
 	return path.substr(pos + 1);
 }
+//traitement de la method head
+static void applyHeadLogic(HttpResponse& response, const HttpRequest& request)
+{
+	if (request.method != "HEAD")
+		return;
+
+	std::ostringstream oss;
+	oss << response.body.size();
+
+	response.headers["Content-Length"] = oss.str();
+	response.body.clear();
+}
 //on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
 {
@@ -403,7 +415,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 	}
 
 	//et la on va faire les reponse de chaque methode
-	if (request.method == "GET")
+	if (request.method == "GET" || request.method == "HEAD")
 	{
 		std::string fileContent;
 		std::string filePath;
@@ -422,6 +434,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 			cgiResult = CgiManager::execute(request, server, location, filePath, interpreter);
 			if (!cgiResult.success)
 				return buildErrorResponse(server, 500, filePath);
+			applyHeadLogic(cgiResult.response, request);
 			return cgiResult.response;
 		}
 		if (isDirectory(filePath))
@@ -434,6 +447,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 				response.reasonPhrase = getReasonPhrase(200);
 				response.headers["Content-Type"] = getContentType(indexPath);
 				response.body = fileContent;
+				applyHeadLogic(response, request);
 				return response;
 			}
 			if (isAutoIndexEnabled(location)
@@ -443,6 +457,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 				response.reasonPhrase = getReasonPhrase(200);
 				response.headers["Content-Type"] = "text/html";
 				response.body = fileContent;
+				applyHeadLogic(response, request);
 				return response;
 			}
 			return buildErrorResponse(server, 403, filePath, true);
@@ -456,6 +471,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		response.reasonPhrase = getReasonPhrase(200);
 		response.headers["Content-Type"] = getContentType(filePath);
 		response.body = fileContent;
+		applyHeadLogic(response, request);
 		return response;
 	}
 
@@ -502,6 +518,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		response.reasonPhrase = "Created";
 		response.headers["Content-Type"] = "text/plain";
 		response.headers["Location"] = locationHeader;
+		response.headers["Set-Cookie"] = "last_upload=" + fileName + "; Path=/";
 		response.body = "File created at: " + locationHeader + "\n";
 		return response;
 	}

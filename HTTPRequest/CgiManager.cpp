@@ -141,8 +141,10 @@ char** CgiManager::buildCgiEnv(const HttpRequest& request,
 	envStrings.push_back("CONTENT_LENGTH=" + contentLength);
 	envStrings.push_back("DOCUMENT_ROOT=" + server.root);
 	envStrings.push_back("GATEWAY_INTERFACE=CGI/1.1");
-	envStrings.push_back("SERVER_PROTOCOL=HTTP/1.1");
+	envStrings.push_back("SERVER_PROTOCOL=" + request.version);
 	envStrings.push_back("REDIRECT_STATUS=200");
+	envStrings.push_back("SERVER_NAME=webserv");
+	envStrings.push_back("SERVER_PORT=8080");
 
 	it = request.headers.find("content-type");
 	if (it != request.headers.end())
@@ -254,10 +256,22 @@ HttpResponse CgiManager::buildResponseFromCgiOutput(const std::string& output)
 		key = trim(line.substr(0, colonPos));
 		value = trim(line.substr(colonPos + 1));
 
+		if (key.empty())
+			continue;
+
 		if (key == "Status")
 		{
 			response.statusCode = parseCgiStatusCode(value);
 			response.reasonPhrase = getReasonPhrase(response.statusCode);
+		}
+		else if (key == "Location")
+		{
+			response.headers[key] = value;
+			if (response.statusCode == 200)
+			{
+				response.statusCode = 302;
+				response.reasonPhrase = getReasonPhrase(response.statusCode);
+			}
 		}
 		else
 			response.headers[key] = value;

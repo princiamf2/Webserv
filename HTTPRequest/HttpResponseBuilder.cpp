@@ -8,6 +8,8 @@ std::string HttpResponseBuilder::buildResponse(HttpResponse const& response)
 {
     std::ostringstream out;
     bool hasContentLength = false;
+    bool hasConnection = false;
+    bool hasServer = false;
 
     out << "HTTP/1.1 " << response.statusCode << " " << response.reasonPhrase << "\r\n";
 
@@ -16,9 +18,17 @@ std::string HttpResponseBuilder::buildResponse(HttpResponse const& response)
     {
         if (it->first == "Content-Length")
             hasContentLength = true;
+        if (it->first == "Connection")
+            hasConnection = true;
+        if (it->first == "Server")
+            hasServer = true;
         out << it->first << ": " << it->second << "\r\n";
     }
 
+    if (!hasServer)
+        out << "Server: webserv\r\n";
+    if (!hasConnection)
+        out << "Connection: close\r\n";
     if (!hasContentLength)
         out << "Content-Length: " << response.body.size() << "\r\n";
 
