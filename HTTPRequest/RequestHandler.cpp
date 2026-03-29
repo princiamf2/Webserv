@@ -1,6 +1,7 @@
 #include "RequestHandler.hpp"
 #include "HttpRequest.hpp"
 #include "CgiManager.hpp"
+#include "HttpResponse.hpp"
 #include <cstddef>
 #include <cstring>
 #include <iostream>
@@ -379,6 +380,46 @@ static void applyHeadLogic(HttpResponse& response, const HttpRequest& request)
 	response.headers["Content-Length"] = oss.str();
 	response.body.clear();
 }
+//petit outil pour mettre dans le header de la reponse les method autoriser quand l'utilisateur rentre une method pas allow
+static std::string buildAllowHeader(Location const* location)
+{
+	std::string allow;
+	bool first = true;
+
+	if (!location || location->allowed_methods_http.empty())
+		return ("GET", "HEAD", "POST", "DELETE");
+	if (location->allowed_methods_http.find("GET") != location->allowed_methods_http.end())
+	{
+		if (!first)
+			allow += ", ";
+		allow += "GET, HEAD";
+		first = false;
+	}
+	if (location->allowed_methods_http.find("POST") != location->allowed_methods_http.end())
+	{
+		if (!first)
+			allow += ", ";
+		allow += "POST";
+		first = false;
+	}
+	if (location->allowed_methods_http.find("DELETE") != location->allowed_methods_http.end())
+	{
+		if (!first)
+			allow += ", ";
+		allow += "DELETE";
+		first = false;
+	}
+	return allow;
+}
+//constructions de la reponse d'une method non allow
+static HttpResponse buildMethodNotAllowedResponse(ServerConfig const& server, Location const* location)
+{
+	HttpResponse response;
+
+	response = buildErrorResponse(server, 405);
+	response.headers["Allow"] = buildAllowHeader(location);
+	return response;
+}
 //on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
 {
@@ -395,7 +436,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 
 	//si s'est pas une methode que la location permet
 	if (!isMethodAllowed(request.method, location))
-		return buildErrorResponse(server, 405);
+		return buildMethodNotAllowedResponse(server, location);
 
 	//si le body depasse la taille limite
 	if (!isBodySizeValid(request, server))

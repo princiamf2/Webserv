@@ -1,5 +1,6 @@
 #include "CgiManager.hpp"
 
+#include <sys/types.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sstream>
@@ -399,26 +400,35 @@ bool CgiManager::readOutput(CgiProcess& process)
 	if (process.stdoutClosed)
 		return true;
 
-	while ((bytesRead = read(process.stdoutFd, buffer, sizeof(buffer))) > 0)
+	bytesRead = read(process.stdoutFd, buffer, sizeof(buffer));
+	if (bytesRead > 0)
+	{
 		process.outputBuffer.append(buffer, bytesRead);
-
-	if (bytesRead < 0)
-		return false;
-
-	close(process.stdoutFd);
-	process.stdoutFd = -1;
-	process.stdoutClosed = true;
-	return true;
+		return true;
+	}
+	if (bytesRead == 0)
+	{
+		close(process.stdoutFd);
+		process.stdoutFd = -1;
+		process.stdoutClosed = true;
+		return true;
+	}
+	return false;
 }
 
 bool CgiManager::checkChild(CgiProcess& process)
 {
 	int status;
+	pid_t ret;
 
 	if (process.childExited)
 		return true;
-	if (waitpid(process.pid, &status, 0) < 0)
+	ret = waitpid(process.pid, &status, WNOHANG);
+	if (ret < 0)
 		return false;
+	if (ret == 0)
+		return true;
+
 	process.childExited = true;
 	process.exitStatus = status;
 	return true;
@@ -466,23 +476,34 @@ CgiResult CgiManager::execute(const HttpRequest& request,
 
 	if (!startProcess(process, request, server, location, scriptPath, interpreter))
 		return result;
-	if (!writeInput(process))
+
+	while (!process.stdoutClosed || !process.childExited)
 	{
-		cleanupProcess(process);
-		waitpid(process.pid, NULL, 0);
-		return result;
+		if (!process.stdinClosed)
+		{
+			if (!writeInput(process))
+			{
+				cleanupProcess(process);
+				waitpid(process.pid, NULL, 0);
+				return result;
+			}
+		}
+		if (!process.stdoutClosed)
+		{
+			if (!readOutput(process))
+			{
+				cleanupProcess(process);
+				waitpid(process.pid, NULL, 0);
+				return result;
+			}
+		}
+		if (!checkChild(process))
+		{
+			cleanupProcess(process);
+			return result;
+		}
 	}
-	if (!readOutput(process))
-	{
-		cleanupProcess(process);
-		waitpid(process.pid, NULL, 0);
-		return result;
-	}
-	if (!checkChild(process))
-	{
-		cleanupProcess(process);
-		return result;
-	}
+
 	result = buildFinalResult(process);
 	cleanupProcess(process);
 	return result;
