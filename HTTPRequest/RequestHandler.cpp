@@ -1,6 +1,8 @@
 #include "RequestHandler.hpp"
 #include "HttpRequest.hpp"
 #include "CgiManager.hpp"
+#include "CgiProcess.hpp"
+#include "RequestAction.hpp"
 #include "HttpResponse.hpp"
 #include "RequestAction.hpp"
 #include <cstddef>
@@ -388,7 +390,7 @@ static std::string buildAllowHeader(Location const* location)
 	bool first = true;
 
 	if (!location || location->allowed_methods_http.empty())
-		return ("GET", "HEAD", "POST", "DELETE");
+		return ("GET, HEAD, POST, DELETE");
 	if (location->allowed_methods_http.find("GET") != location->allowed_methods_http.end())
 	{
 		if (!first)
@@ -584,21 +586,22 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 	return buildErrorResponse(server, 500);
 }
 
-RequestAction RequestHandler::resolveAction(HttpRequest const& request, const ServerConfig &server, Location const* location)
+ActionRequest RequestHandler::resolveAction(HttpRequest const& request, ServerConfig const& server, Location const* location)
 {
-	RequestAction action;
+	ActionRequest action;
 	std::string root;
 	std::string filePath;
 	std::string extension;
 
 	root = resolveRoot(server, location);
-	if (request.version != "HTTP/1.1" || !isMethodAllowed(request.method, location) || !isBodySizeValid(request, server) || !isSupportedMethod(request.method) || hasRedirect(location))
+
+	if (request.version != "HTTP/1.1" || !isSupportedMethod(request.method) || !isMethodAllowed(request.method, location) || !isBodySizeValid(request, server) || hasRedirect(location))
 	{
 		action.type = ACTION_IMMEDIATE_RESPONSE;
 		action.response = handleRequest(request, server, location);
 		return action;
 	}
-	if (request.method == "GET" || request.method == "HEAD" || request.method == "DELETE" || buildFilePath(root, request.path, location, server, filePath) || CgiManager::isCgiRequest(filePath, location))
+	if ((request.method == "GET" || request.method == "HEAD" || request.method == "POST") && buildFilePath(root, request.path, location, server, filePath) && CgiManager::isCgiRequest(filePath, location))
 	{
 		extension = getFileExtension(filePath);
 		action.interpreter = CgiManager::getCgiInterpreter(extension, location);
