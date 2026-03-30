@@ -2,6 +2,7 @@
 
 Server::Server(ServerConfig serv)
 {
+	_conf = serv;
 	_host = "127.0.0.1";
 	_ports = serv.listen_ports; //ports d'ecoute
 	_domainNames = serv.domain_names; //noms de domaine
@@ -10,8 +11,42 @@ Server::Server(ServerConfig serv)
 	_errorPages = serv.error_pages; //code d'erreur + chemin (page 404 par exemple)
 	_clientMaxBodySize = serv.client_max_body_size; //taille max du corps de la requete
 	_locations = serv.locations; //liste des locations pour ce serveur
-	// _listenFds; // un fd par port après socket()+bind()+listen(), remplis par init
+	// _listenFds; // un fd par port apres socket()+bind()+listen(), remplis par init
 	_autoindex = false;
+}
+
+Server::Server(const Server& other)
+	: _conf(other._conf),
+	_host(other._host),
+	_ports(other._ports),
+	_domainNames(other._domainNames),
+	_root(other._root),
+	_index(other._index),
+	_errorPages(other._errorPages),
+	_clientMaxBodySize(other._clientMaxBodySize),
+	_locations(other._locations),
+	_listenFds(other._listenFds),
+	_clients(other._clients),
+	_autoindex(other._autoindex)
+{}
+
+Server& Server::operator=(const Server& other)
+{
+	if (this == &other)
+		return (*this);
+	_conf = other._conf;
+	_host = other._host;
+	_ports = other._ports;
+	_domainNames = other._domainNames;
+	_root = other._root;
+	_index = other._index;
+	_errorPages = other._errorPages;
+	_clientMaxBodySize = other._clientMaxBodySize;
+	_locations = other._locations;
+	_autoindex = other._autoindex;
+	_listenFds = other._listenFds;
+	_clients = other._clients;
+	return (*this);
 }
 
 int Server::init(void)
@@ -27,8 +62,8 @@ int Server::init(void)
 
 		struct sockaddr_in addr;
 		memset(&addr, 0, sizeof(addr));
-		addr.sin_family	  = AF_INET;
-		addr.sin_port		= htons(*it);
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(*it);
 		addr.sin_addr.s_addr = inet_addr(_host.c_str());
 
 		if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
@@ -41,9 +76,107 @@ int Server::init(void)
 	return (SUCCESS);
 }
 
+bool Server::clientWaitingBody(int fd)
+{
+	return (_clients[fd].waitingBody);
+}
+void Server::addClient(int fd)
+{
+	Client c;
+	c.fd = fd;
+	c.toClose = false;
+	c.waitingBody = false;
+	c.lastActivity = time(NULL);
+	_clients[fd] = c;
+}
+
+void Server::removeClient(int fd)
+{
+	_clients.erase(fd);
+}
+
+bool Server::clientTimedOut(int fd, time_t now, int timeout)
+{
+	return (now - _clients[fd].lastActivity > timeout);
+}
+
+void Server::readClient(int fd)
+{
+	char	buf[4096];
+	ssize_t bytes = recv(fd, buf, sizeof(buf), 0);
+
+	if (bytes <= 0) // 0 = déconnexion, -1 = erreur
+	{
+		_clients[fd].toClose = true; // TODO to handle
+		return ;
+	}
+	_clients[fd].lastActivity = time(NULL);
+
+	_clients[fd].readBuf.append(buf, bytes);
+
+	size_t headerEnd = _clients[fd].readBuf.find("\r\n\r\n");
+	if (headerEnd == std::string::npos)
+		return ; // wiating for headers to end
+
+	size_t contentLength = 0;
+	size_t clPos = _clients[fd].readBuf.find("Content-Length: ");
+
+	if (clPos != std::string::npos && clPos < headerEnd)
+	{
+		size_t clEnd = _clients[fd].readBuf.find("\r\n", clPos);
+		std::string tmp = _clients[fd].readBuf.substr(clPos + 16, clEnd - clPos - 16);
+		contentLength = std::atoll(tmp.c_str());
+		std::cout << "lenght found, pos: " << clPos << ", lenght: " << contentLength << std::endl;
+		size_t bodySize = _clients[fd].readBuf.size() - (headerEnd + 4);
+		if (bodySize < contentLength)
+		{
+			_clients[fd].waitingBody = true;
+			return ; // incomplete body
+		}
+	}
+	else
+		std::cout << "lenght not found, sending request" << std::endl;
+
+	std::string response = handleRawHttpRequest(_clients[fd].readBuf, _conf);
+	_clients[fd].writeBuf = response;
+	_clients[fd].readBuf.clear();
+
+	// VVV hard code for test VVV
+	// std::string response =
+	//		"HTTP/1.1 200 OK\r\n"
+	//		"Content-Length: 13\r\n"
+	//		"Content-Type: text/plain\r\n"
+	//		"\r\n"
+	//		"Hello World!\n";
+}
+
+void Server::writeClient(int fd)
+{
+	if (_clients[fd].writeBuf.empty())
+		return ;
+
+	ssize_t bytes = send(fd, _clients[fd].writeBuf.c_str(),
+							 _clients[fd].writeBuf.size(), 0);
+	if (bytes == -1)
+	{
+		_clients[fd].toClose = true;
+		return ;
+	}
+	_clients[fd].writeBuf.erase(0, bytes); // remove only added bytes
+	_clients[fd].lastActivity = time(NULL);
+}
+
+bool Server::clientHasData(int fd)
+{
+	return (!_clients[fd].writeBuf.empty());
+}
+
 Server::~Server()
 {
-	//deletes?
+//	for (size_t i = 0; i < _listenFds.size(); i++)
+//		close(_listenFds[i]); // close listen socket
+//	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+//		close(it->first); // close clients
 }
 
 std::vector<int>& Server::getListenFds(void)
@@ -51,6 +184,15 @@ std::vector<int>& Server::getListenFds(void)
 	return (_listenFds);
 }
 
+std::map<int, Client>& Server::getClients(void)
+{
+	return (_clients);
+}
+
+bool Server::clientToClose(int fd)
+{
+	return (_clients[fd].toClose);
+}
 
 void Server::debug()
 {
@@ -88,68 +230,3 @@ void Server::debug()
 
 
 
-
-
-
-
-
-
-
-
-
-/*
-int Server::loop(void)
-{
-	while (true)
-	{
-		int nReady = poll(_pollFds.data(), _pollFds.size(), -1); // wait for events
-		if (nReady < 0)
-		{
-			if (errno == EINTR)
-				continue;
-			throw std::runtime_error("poll() failed");
-		}
-		size_t size = _pollFds.size();
-
-		for (size_t i = 0; i < size; i++)
-		{
-			if (_pollFds[i].revents == 0)
-				continue; // Rien sur le fd
-			int fd = _pollFds[i].fd;
-			// ── Cas 1 : Erreur ou déconnexion ─────────────────────────
-			if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
-			{
-				// close_client(fd);
-				;
-				continue;
-			}
-			// ── Cas 2 : Socket d'écoute → nouvelle connexion ──────────
-			// if (is_listen_fd(fd) && (_pollFds[i].revents & POLLIN))
-			// {
-				// accept_new_client(fd);
-				// continue;
-			// }
-			// ── Cas 3 : Socket client → lecture ───────────────────────
-			if (_pollFds[i].revents & POLLIN)
-			{
-				// read_from_client(fd);
-				;
-			}
-
-			// ── Cas 4 : Socket client → écriture ──────────────────────
-			if (_pollFds[i].revents & POLLOUT)
-			{
-				// write_to_client(fd);
-				;
-			}
-			(void)fd;
-		}
-
-		// ─── Phase 3 : Nettoyage des fds marqués ───────────────────────
-		// cleanup_closed_fds();
-
-	}
-	return (SUCCESS);
-}
-
-*/

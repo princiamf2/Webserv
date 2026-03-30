@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <poll.h>
 #include <cstring>
+#include <unistd.h>
 
 #include "colors.hpp"
 #include "../Parsing/Location.hpp"
@@ -18,6 +19,7 @@
 //====================(DEFINES)=============================//
 # define SUCCESS 1
 # define FAIL 0
+# define TIMEOUT 60
 
 //====================(STRUCTS)=============================//
 
@@ -37,7 +39,9 @@ class Core
 		~Core();
 		void addFdsToCore(size_t serverIndex);
 		int  init(void);                         // init of the binds listen etc
-		void runPoll();                     // run main loop with poll
+		void runPoll();                          // run main loop with poll
+		void acceptClient(int listenFd);         // add a client to fds list
+		void closeClient(int fd);           // close and remove client
 		void debug();
 };
 
