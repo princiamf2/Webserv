@@ -10,7 +10,7 @@ class RequestHandler
 {
     public:
         static HttpResponse handleRequest(HttpRequest const&, ServerConfig const&, Location const*);
-        static RequestAction resolveAction(HttpRequest const&, ServerConfig const&, Location const*);
+        static ActionRequest resolveAction(HttpRequest const&, ServerConfig const&, Location const*);
 };
 
 #endif /* REQUESTHANDLER_HPP */
