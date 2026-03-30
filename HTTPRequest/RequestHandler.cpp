@@ -2,6 +2,7 @@
 #include "HttpRequest.hpp"
 #include "CgiManager.hpp"
 #include "HttpResponse.hpp"
+#include "RequestAction.hpp"
 #include <cstddef>
 #include <cstring>
 #include <iostream>
@@ -581,4 +582,39 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		return response;
 	}
 	return buildErrorResponse(server, 500);
+}
+
+RequestAction RequestHandler::resolveAction(HttpRequest const& request, const ServerConfig &server, Location const* location)
+{
+	RequestAction action;
+	std::string root;
+	std::string filePath;
+	std::string extension;
+
+	root = resolveRoot(server, location);
+	if (request.version != "HTTP/1.1" || !isMethodAllowed(request.method, location) || !isBodySizeValid(request, server) || !isSupportedMethod(request.method) || hasRedirect(location))
+	{
+		action.type = ACTION_IMMEDIATE_RESPONSE;
+		action.response = handleRequest(request, server, location);
+		return action;
+	}
+	if (request.method == "GET" || request.method == "HEAD" || request.method == "DELETE" || buildFilePath(root, request.path, location, server, filePath) || CgiManager::isCgiRequest(filePath, location))
+	{
+		extension = getFileExtension(filePath);
+		action.interpreter = CgiManager::getCgiInterpreter(extension, location);
+		if (action.interpreter.empty())
+		{
+			action.type = ACTION_IMMEDIATE_RESPONSE;
+			action.response = buildErrorResponse(server, 500, filePath);
+			return action;
+		}
+		action.type = ACTION_START_CGI;
+		action.request = request;
+		action.location = location;
+		action.scriptPath = filePath;
+		return action;
+	}
+	action.type = ACTION_IMMEDIATE_RESPONSE;
+	action.response = handleRequest(request, server, location);
+	return action;
 }
