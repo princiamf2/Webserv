@@ -76,17 +76,28 @@ int Server::init(void)
 	return (SUCCESS);
 }
 
+bool Server::clientWaitingBody(int fd)
+{
+	return (_clients[fd].waitingBody);
+}
 void Server::addClient(int fd)
 {
 	Client c;
 	c.fd = fd;
 	c.toClose = false;
+	c.waitingBody = false;
+	c.lastActivity = time(NULL);
 	_clients[fd] = c;
 }
 
 void Server::removeClient(int fd)
 {
 	_clients.erase(fd);
+}
+
+bool Server::clientTimedOut(int fd, time_t now, int timeout)
+{
+	return (now - _clients[fd].lastActivity > timeout);
 }
 
 void Server::readClient(int fd)
@@ -99,20 +110,44 @@ void Server::readClient(int fd)
 		_clients[fd].toClose = true; // TODO to handle
 		return ;
 	}
+	_clients[fd].lastActivity = time(NULL);
 
 	_clients[fd].readBuf.append(buf, bytes);
 
-	if (_clients[fd].readBuf.find("\r\n\r\n") != std::string::npos)
+	size_t headerEnd = _clients[fd].readBuf.find("\r\n\r\n");
+	if (headerEnd == std::string::npos)
+		return ; // wiating for headers to end
+
+	size_t contentLength = 0;
+	size_t clPos = _clients[fd].readBuf.find("Content-Length: ");
+
+	if (clPos != std::string::npos && clPos < headerEnd)
 	{
-		std::string response = handleRawHttpRequest(_clients[fd].readBuf, _conf);
+		size_t clEnd = _clients[fd].readBuf.find("\r\n", clPos);
+		std::string tmp = _clients[fd].readBuf.substr(clPos + 16, clEnd - clPos - 16);
+		contentLength = std::atoll(tmp.c_str());
+		std::cout << "lenght found, pos: " << clPos << ", lenght: " << contentLength << std::endl;
+		size_t bodySize = _clients[fd].readBuf.size() - (headerEnd + 4);
+		if (bodySize < contentLength)
+		{
+			_clients[fd].waitingBody = true;
+			return ; // incomplete body
+		}
+	}
+	else
+		std::cout << "lenght not found, sending request" << std::endl;
+
+	std::string response = handleRawHttpRequest(_clients[fd].readBuf, _conf);
+	_clients[fd].writeBuf = response;
+	_clients[fd].readBuf.clear();
+
+	// VVV hard code for test VVV
+	// std::string response =
 	//		"HTTP/1.1 200 OK\r\n"
 	//		"Content-Length: 13\r\n"
 	//		"Content-Type: text/plain\r\n"
 	//		"\r\n"
 	//		"Hello World!\n";
-		_clients[fd].writeBuf = response;
-		_clients[fd].readBuf.clear();
-	}
 }
 
 void Server::writeClient(int fd)
@@ -128,6 +163,7 @@ void Server::writeClient(int fd)
 		return ;
 	}
 	_clients[fd].writeBuf.erase(0, bytes); // remove only added bytes
+	_clients[fd].lastActivity = time(NULL);
 }
 
 bool Server::clientHasData(int fd)
@@ -146,6 +182,11 @@ Server::~Server()
 std::vector<int>& Server::getListenFds(void)
 {
 	return (_listenFds);
+}
+
+std::map<int, Client>& Server::getClients(void)
+{
+	return (_clients);
 }
 
 bool Server::clientToClose(int fd)
