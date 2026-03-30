@@ -32,7 +32,24 @@ void Core::runPoll()
 {
 	while (true) //we'll need to handle signals
 	{
-		int ret = poll(_pollFds.data(), _pollFds.size(), -1); // timeout 5s
+		time_t now = time(NULL);
+		std::vector<int> toClose;
+		for (std::map<int, Server*>::iterator it = _fdToClient.begin(); it != _fdToClient.end(); ++it)
+		{
+			int clientFd = it->first;
+			Server* srv = it->second;
+		
+			int timeout = srv->clientWaitingBody(clientFd) ? BODYTO : TIMEOUT;
+			if (srv->clientTimedOut(clientFd, now, timeout))
+				toClose.push_back(clientFd);
+		}
+
+		for (size_t i = 0; i < toClose.size(); i++)
+			closeClient(toClose[i]);
+
+
+
+		int ret = poll(_pollFds.data(), _pollFds.size(), 1);
 
 		if (ret == -1)
 		{
@@ -43,7 +60,6 @@ void Core::runPoll()
 		}
 		if (ret == 0)
 			continue;
-
 		size_t size = _pollFds.size();
 		for (size_t i = 0; i < size; i++)
 		{
@@ -75,7 +91,11 @@ void Core::runPoll()
 				_pollFds[i].events |= POLLOUT;
 
 			if (_fdToClient[fd]->clientToClose(fd))
+			{
 				closeClient(fd);
+				size--;
+				i--;
+			}
 
 		}
 	}
