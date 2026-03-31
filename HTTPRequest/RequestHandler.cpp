@@ -1,25 +1,12 @@
 #include "RequestHandler.hpp"
-#include "HttpRequest.hpp"
 #include "CgiManager.hpp"
-#include "CgiProcess.hpp"
-#include "RequestAction.hpp"
-#include "HttpResponse.hpp"
-#include "RequestAction.hpp"
-#include <cstddef>
-#include <cstring>
-#include <iostream>
+#include "RequestUtils.hpp"
 #include <sstream>
 #include <fstream>
 #include <string>
 #include <cstdio>
 #include <sys/stat.h>
 #include <dirent.h>
-#include <sys/types.h>
-#include <vector>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <cstdlib>
-#include <cerrno>
 
 //petit check de la taile du body
 static bool isBodySizeValid(HttpRequest const& request, ServerConfig const& server)
@@ -28,17 +15,11 @@ static bool isBodySizeValid(HttpRequest const& request, ServerConfig const& serv
 		return true;
 	return (request.body.size() <= server.client_max_body_size);
 }
-//renvoi le bon root
-static std::string resolveRoot(ServerConfig const& server, Location const* location)
-{
-	if (location && !location->root.empty())
-		return location->root;
-	return server.root;
-}
 //petit outil qui check les methods si la method on la supporte
 static bool isSupportedMethod(std::string const& method)
 {
-    return (method == "GET" || method == "HEAD" || method == "POST" || method == "DELETE");
+	return (method == "GET" || method == "HEAD"
+		|| method == "POST" || method == "DELETE");
 }
 //petit outil qui check si la methode et autoriser dans une location
 static bool isMethodAllowed(std::string const& method, Location const* location)
@@ -47,92 +28,9 @@ static bool isMethodAllowed(std::string const& method, Location const* location)
 		return true;
 	if (location->allowed_methods_http.empty())
 		return true;
-	return (location->allowed_methods_http.find(method) != location->allowed_methods_http.end());
+	return (location->allowed_methods_http.find(method)
+		!= location->allowed_methods_http.end());
 }
-//normalisation du chemin relatif
-static bool normalizeRelativePath(std::string const& rawPath, std::string& normalized)
-{
-	std::vector<std::string> segments;
-	size_t i = 0;
-
-	while (i < rawPath.size())
-	{
-		while (i < rawPath.size() && rawPath[i] == '/')
-			++i;
-		size_t start = i;
-		while (i < rawPath.size() && rawPath[i] != '/')
-			++i;
-		std::string part = rawPath.substr(start, i - start);
-		if (part.empty() || part == ".")
-			continue;
-		if (part == "..")
-		{
-			if (segments.empty())
-				return false;
-			segments.pop_back();
-			continue;
-		}
-		segments.push_back(part);
-	}
-	normalized.clear();
-	for (size_t j = 0; j < segments.size(); ++j)
-		normalized += "/" + segments[j];
-	if (normalized.empty())
-		normalized = "/";
-	return true;
-}
-static bool locationMatches(std::string const& requestPath, std::string const& locationPath)
-{
-	if (locationPath.empty())
-		return false;
-	if (requestPath == locationPath)
-		return true;
-	if (requestPath.find(locationPath) != 0)
-		return false;
-	if (locationPath[locationPath.size() - 1] == '/')
-		return true;
-	if (requestPath.size() > locationPath.size()
-		&& requestPath[locationPath.size()] == '/')
-		return true;
-	return false;
-}
-//construit le path
-static bool buildFilePath(std::string const& root,
-	std::string const& path,
-	Location const* location,
-	ServerConfig const& server,
-	std::string& filePath)
-{
-	std::string relativePath = path;
-	std::string normalizedPath;
-
-	(void)server;
-
-	if (location && locationMatches(path, location->path))
-		relativePath = path.substr(location->path.size());
-
-	if (relativePath.empty())
-		relativePath = "/";
-
-	if (!normalizeRelativePath(relativePath, normalizedPath))
-		return false;
-
-	if (!root.empty() && root[root.size() - 1] == '/')
-		filePath = root.substr(0, root.size() - 1) + normalizedPath;
-	else
-		filePath = root + normalizedPath;
-	return true;
-}
-
-// TODO:
-// Cette version normalise les segments "." et ".." et bloque les remontées
-// au-dessus de la racine logique.
-//
-// Amélioration possible plus tard:
-// - utiliser realpath() pour une canonisation filesystem réelle
-// - gérer les symlinks
-// - gérer le décodage URL (%2e%2e, etc.)
-
 //lire le fichier ce trouvant sur le path crée
 static bool readFileContent(std::string const& filePath, std::string& content)
 {
@@ -160,17 +58,11 @@ static bool deleteFile(std::string const& filePath)
 {
 	return (std::remove(filePath.c_str()) == 0);
 }
-//recuperer extension
-static std::string getFileExtension(std::string const& filePath)
-{
-	size_t dotPos = filePath.rfind('.');
-	if (dotPos == std::string::npos)
-		return "";
-	return filePath.substr(dotPos);
-}
+//recuperer le bon content type
 static std::string getContentType(std::string const& filePath)
 {
 	std::string extension = getFileExtension(filePath);
+
 	if (extension == ".html" || extension == ".htm")
 		return "text/html";
 	if (extension == ".css")
@@ -197,12 +89,14 @@ static std::string resolveUploadBase(ServerConfig const& server, Location const*
 static bool pathExists(std::string const& path)
 {
 	struct stat pathStat;
+
 	return (stat(path.c_str(), &pathStat) == 0);
 }
 //verifie si s'est un dossier
 static bool isDirectory(std::string const& path)
 {
 	struct stat pathStat;
+
 	if (stat(path.c_str(), &pathStat) != 0)
 		return false;
 	return S_ISDIR(pathStat.st_mode);
@@ -269,12 +163,13 @@ static bool hasRedirect(Location const* location)
 	if (!location)
 		return false;
 	return (location->redirect_page.first != 0
-			&& !location->redirect_page.second.empty());
+		&& !location->redirect_page.second.empty());
 }
 // check que le code est bon
 static int resolveRedirectCode(Location const* location)
 {
 	int code = location->redirect_page.first;
+
 	if (code == 301 || code == 302 || code == 303
 		|| code == 307 || code == 308)
 		return code;
@@ -285,68 +180,33 @@ static std::string getReasonPhrase(int code)
 {
 	switch (code)
 	{
-	case 200: return "OK";
-	case 201: return "Created";
-	case 301: return "Moved Permanently";
-	case 302: return "Found";
-	case 303: return "See Other";
-	case 307: return "Temporary Redirect";
-	case 308: return "Permanent Redirect";
-	case 400: return "Bad Request";
-	case 403: return "Forbidden";
-	case 404: return "Not Found";
-	case 405: return "Method Not Allowed";
-	case 413: return "Payload Too Large";
-	case 500: return "Internal Server Error";
-	case 501: return "Not Implemented";
-	case 505: return "HTTP Version Not Supported";
-	default: return "Internal Server Error";
+		case 200: return "OK";
+		case 201: return "Created";
+		case 301: return "Moved Permanently";
+		case 302: return "Found";
+		case 303: return "See Other";
+		case 307: return "Temporary Redirect";
+		case 308: return "Permanent Redirect";
+		case 400: return "Bad Request";
+		case 403: return "Forbidden";
+		case 404: return "Not Found";
+		case 405: return "Method Not Allowed";
+		case 413: return "Payload Too Large";
+		case 500: return "Internal Server Error";
+		case 501: return "Not Implemented";
+		case 505: return "HTTP Version Not Supported";
+		default: return "Internal Server Error";
 	}
 }
 static std::string intToString(int n)
 {
 	std::ostringstream oss;
+
 	oss << n;
 	return oss.str();
 }
-static std::string buildErrorBody(int code, std::string const& path, bool directoryListingDenied)
-{
-	std::string body = intToString(code) + " " + getReasonPhrase(code) + "\n";
-	if (path.empty())
-		return body;
-	if (directoryListingDenied)
-		return body + "directory listing denied: " + path + "\n";
-	return body + "file path = " + path + "\n";
-}
-static bool getErrorPagePath(ServerConfig const& server, int code, std::string& path)
-{
-	std::map<int, std::string>::const_iterator it (server.error_pages.find(code));
-	if (it == server.error_pages.end())
-		return false;
-	path = it->second;
-	return true;
-}
-static HttpResponse buildErrorResponse(ServerConfig const& server, int code, std::string const& path = "", bool directoryListingDenied = false)
-{
-	HttpResponse response;
-	std::string errorPath;
-	std::string errorContent;
-
-	response.statusCode = code;
-	response.reasonPhrase = getReasonPhrase(code);
-	if (getErrorPagePath(server, code, errorPath)
-		&& readFileContent(errorPath, errorContent))
-	{
-		response.headers["Content-Type"] = getContentType(errorPath);
-		response.body = errorContent;
-		return response;
-	}
-	response.headers["Content-Type"] = "text/plain";
-	response.body = buildErrorBody(code, path, directoryListingDenied);
-	return response;
-}
-
-static std::string buildUniqueUploadPath(ServerConfig const& server, Location const* location)
+static std::string buildUniqueUploadPath(ServerConfig const& server,
+	Location const* location)
 {
 	std::string base = resolveUploadBase(server, location);
 	std::string candidate;
@@ -379,7 +239,6 @@ static void applyHeadLogic(HttpResponse& response, const HttpRequest& request)
 
 	std::ostringstream oss;
 	oss << response.body.size();
-
 	response.headers["Content-Length"] = oss.str();
 	response.body.clear();
 }
@@ -391,21 +250,24 @@ static std::string buildAllowHeader(Location const* location)
 
 	if (!location || location->allowed_methods_http.empty())
 		return ("GET, HEAD, POST, DELETE");
-	if (location->allowed_methods_http.find("GET") != location->allowed_methods_http.end())
+	if (location->allowed_methods_http.find("GET")
+		!= location->allowed_methods_http.end())
 	{
 		if (!first)
 			allow += ", ";
 		allow += "GET, HEAD";
 		first = false;
 	}
-	if (location->allowed_methods_http.find("POST") != location->allowed_methods_http.end())
+	if (location->allowed_methods_http.find("POST")
+		!= location->allowed_methods_http.end())
 	{
 		if (!first)
 			allow += ", ";
 		allow += "POST";
 		first = false;
 	}
-	if (location->allowed_methods_http.find("DELETE") != location->allowed_methods_http.end())
+	if (location->allowed_methods_http.find("DELETE")
+		!= location->allowed_methods_http.end())
 	{
 		if (!first)
 			allow += ", ";
@@ -415,7 +277,8 @@ static std::string buildAllowHeader(Location const* location)
 	return allow;
 }
 //constructions de la reponse d'une method non allow
-static HttpResponse buildMethodNotAllowedResponse(ServerConfig const& server, Location const* location)
+static HttpResponse buildMethodNotAllowedResponse(ServerConfig const& server,
+	Location const* location)
 {
 	HttpResponse response;
 
@@ -424,17 +287,18 @@ static HttpResponse buildMethodNotAllowedResponse(ServerConfig const& server, Lo
 	return response;
 }
 //on fait une validation et on met les code d'erreur et les message d'erreur
-HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerConfig const& server, Location const* location)
+HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
+	ServerConfig const& server, Location const* location)
 {
-    HttpResponse response;
+	HttpResponse response;
 	std::string root = resolveRoot(server, location);
 
 	//si pas bonne version
-    if (request.version != "HTTP/1.1")
-        return buildErrorResponse(server, 505);
+	if (request.version != "HTTP/1.1")
+		return buildErrorResponse(server, 505);
 
 	//si s'est pas une method que nous supportons
-    if (!isSupportedMethod(request.method))
+	if (!isSupportedMethod(request.method))
 		return buildErrorResponse(server, 501);
 
 	//si s'est pas une methode que la location permet
@@ -454,7 +318,8 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		response.reasonPhrase = getReasonPhrase(code);
 		response.headers["Location"] = location->redirect_page.second;
 		response.headers["Content-Type"] = "text/plain";
-		response.body = "Redirecting to: " + location->redirect_page.second + "\n";
+		response.body = "Redirecting to: "
+			+ location->redirect_page.second + "\n";
 		return response;
 	}
 
@@ -475,7 +340,8 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 			if (interpreter.empty())
 				return buildErrorResponse(server, 500, filePath);
 
-			cgiResult = CgiManager::execute(request, server, location, filePath, interpreter);
+			cgiResult = CgiManager::execute(request, server,
+				location, filePath, interpreter);
 			if (!cgiResult.success)
 				return buildErrorResponse(server, 500, filePath);
 			applyHeadLogic(cgiResult.response, request);
@@ -483,7 +349,8 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		}
 		if (isDirectory(filePath))
 		{
-			std::string indexPath = joinPath(filePath, resolveIndex(server, location));
+			std::string indexPath = joinPath(filePath,
+				resolveIndex(server, location));
 
 			if (readFileContent(indexPath, fileContent))
 			{
@@ -535,7 +402,8 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 			if (interpreter.empty())
 				return buildErrorResponse(server, 500, filePath);
 
-			cgiResult = CgiManager::execute(request, server, location, filePath, interpreter);
+			cgiResult = CgiManager::execute(request, server,
+				location, filePath, interpreter);
 			if (!cgiResult.success)
 				return buildErrorResponse(server, 500, filePath);
 			return cgiResult.response;
@@ -562,7 +430,8 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 		response.reasonPhrase = "Created";
 		response.headers["Content-Type"] = "text/plain";
 		response.headers["Location"] = locationHeader;
-		response.headers["Set-Cookie"] = "last_upload=" + fileName + "; Path=/";
+		response.headers["Set-Cookie"] = "last_upload="
+			+ fileName + "; Path=/";
 		response.body = "File created at: " + locationHeader + "\n";
 		return response;
 	}
@@ -586,7 +455,8 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request, ServerCon
 	return buildErrorResponse(server, 500);
 }
 
-ActionRequest RequestHandler::resolveAction(HttpRequest const& request, ServerConfig const& server, Location const* location)
+ActionRequest RequestHandler::resolveAction(HttpRequest const& request,
+	ServerConfig const& server, Location const* location)
 {
 	ActionRequest action;
 	std::string root;
@@ -595,13 +465,20 @@ ActionRequest RequestHandler::resolveAction(HttpRequest const& request, ServerCo
 
 	root = resolveRoot(server, location);
 
-	if (request.version != "HTTP/1.1" || !isSupportedMethod(request.method) || !isMethodAllowed(request.method, location) || !isBodySizeValid(request, server) || hasRedirect(location))
+	if (request.version != "HTTP/1.1"
+		|| !isSupportedMethod(request.method)
+		|| !isMethodAllowed(request.method, location)
+		|| !isBodySizeValid(request, server)
+		|| hasRedirect(location))
 	{
 		action.type = ACTION_IMMEDIATE_RESPONSE;
 		action.response = handleRequest(request, server, location);
 		return action;
 	}
-	if ((request.method == "GET" || request.method == "HEAD" || request.method == "POST") && buildFilePath(root, request.path, location, server, filePath) && CgiManager::isCgiRequest(filePath, location))
+	if ((request.method == "GET" || request.method == "HEAD"
+			|| request.method == "POST")
+		&& buildFilePath(root, request.path, location, server, filePath)
+		&& CgiManager::isCgiRequest(filePath, location))
 	{
 		extension = getFileExtension(filePath);
 		action.interpreter = CgiManager::getCgiInterpreter(extension, location);

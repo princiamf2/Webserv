@@ -3,6 +3,7 @@
 //====================(INCLUDES)============================//
 #include <iostream>
 #include <sys/socket.h>
+#include "../HTTPRequest/CgiProcess.hpp"
 #include <poll.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -32,6 +33,9 @@ struct Client {
 	std::string writeBuf;     // to send
 	time_t      lastActivity;  // for incomplete requests
 	bool        waitingBody;
+	bool		cgiActive;
+	CgiProcess	cgi;
+
 	///////////////////////////////////////////////////////////////bool si cgi actif et process
 	// others : adresse IP, config serveur associée, etc
 };
