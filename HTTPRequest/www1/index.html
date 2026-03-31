@@ -1,1 +1,95 @@
-HOME SERVER 1
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Webserv - Accueil</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <nav class="topbar">
+        <div class="brand">webserv</div>
+        <div class="nav-links">
+          <a href="index.html">Accueil</a>
+          <a href="features.html">Fonctionnalités</a>
+          <a href="upload.html">Upload</a>
+          <a href="about.html">Projet</a>
+        </div>
+      </nav>
+
+      <div class="hero-content">
+        <div>
+          <span class="badge">C++98 • HTTP • 42</span>
+          <h1>Un site statique propre pour tester ton webserv</h1>
+          <p class="lead">
+            Une vitrine moderne, légère et facile à brancher sur ton projet.
+            Elle permet de tester les pages statiques, la navigation, les pages d'erreur,
+            et d'avoir un rendu plus sérieux pendant la démo.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="features.html">Voir les pages</a>
+            <a class="btn btn-secondary" href="about.html">Comprendre la structure</a>
+          </div>
+        </div>
+        <div class="hero-card glass">
+          <h2>Checklist rapide</h2>
+          <ul class="clean-list">
+            <li>GET sur plusieurs pages</li>
+            <li>Navigation entre routes</li>
+            <li>Pages d'erreur dédiées</li>
+            <li>Page upload de démonstration</li>
+            <li>Design cohérent pour la soutenance</li>
+          </ul>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section-grid">
+        <article class="card">
+          <h3>Accueil</h3>
+          <p>Une landing page claire avec hero, navigation et cartes de présentation.</p>
+        </article>
+        <article class="card">
+          <h3>Fonctionnalités</h3>
+          <p>Une page pour montrer les méthodes, la config, le CGI et le comportement du serveur.</p>
+        </article>
+        <article class="card">
+          <h3>Upload</h3>
+          <p>Une interface statique élégante pour présenter l'idée d'upload, même sans JS.</p>
+        </article>
+        <article class="card">
+          <h3>Erreurs</h3>
+          <p>Des pages 404 et 500 plus propres que du texte brut, utiles pour les tests.</p>
+        </article>
+      </section>
+
+      <section class="split-section">
+        <div class="card">
+          <p class="eyebrow">Pourquoi cette structure ?</p>
+          <h2>Fait pour ton projet webserv</h2>
+          <p>
+            Le sujet demande que le serveur puisse servir un site complètement statique,
+            avec pages d'erreur par défaut si besoin, et qu'il reste testable depuis un vrai navigateur.
+            Ces pages répondent exactement à ce besoin.
+          </p>
+        </div>
+        <div class="card accent-card">
+          <p class="eyebrow">Conseil</p>
+          <h2>Utilise-les pour la démo</h2>
+          <p>
+            Tu peux mapper la racine sur ce dossier, configurer les erreurs 404/500,
+            puis montrer que ton serveur rend quelque chose de propre au lieu d'une simple page brute.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Projet webserv • pages statiques de démonstration</p>
+    </footer>
+  </div>
+</body>
+</html>
