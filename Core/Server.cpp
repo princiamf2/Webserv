@@ -1,4 +1,9 @@
 #include "./Server.hpp"
+#include "../HTTPRequest/HttpParser.hpp"
+#include "../HTTPRequest/HttpResponseBuilder.hpp"
+#include "../HTTPRequest/RequestHandler.hpp"
+#include "../HTTPRequest/RequestAction.hpp"
+#include "../HTTPRequest/CgiManager.hpp"
 
 Server::Server(ServerConfig serv)
 {
@@ -86,6 +91,7 @@ void Server::addClient(int fd)
 	c.fd = fd;
 	c.toClose = false;
 	c.waitingBody = false;
+	c.cgiActive = false;
 	c.lastActivity = time(NULL);
 	_clients[fd] = c;
 }
