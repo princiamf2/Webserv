@@ -28,8 +28,6 @@ class CgiManager
 		static CgiResult buildFinalResult(CgiProcess& process);
 		static void cleanupProcess(CgiProcess& process);
 
-		static CgiResult execute(const HttpRequest& request, const ServerConfig& server, const Location* location, const std::string& scriptPath, const std::string& interpreter);
-
 	private:
 		static std::string getScriptName(const std::string& scriptPath);
 		static std::string getDirectoryPath(const std::string& path);

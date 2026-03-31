@@ -16,6 +16,13 @@
 #include "../Parsing/Location.hpp"
 #include "../Parsing/ParseConfig.hpp"
 #include "../HTTPRequest/HttpModule.hpp"
+#include "../HTTPRequest/HttpParser.hpp"
+#include "../HTTPRequest/HttpResponse.hpp"
+#include "../HTTPRequest/RequestHandler.hpp"
+#include "../HTTPRequest/CgiManager.hpp"
+#include "../HTTPRequest/RequestUtils.hpp"
+#include "../HTTPRequest/HttpResponseBuilder.hpp"
+
 
 
 //====================(DEFINES)=============================//
@@ -76,6 +83,10 @@ class Server
 		bool        clientToClose(int fd);              // getter pour les toClose
 		bool clientWaitingBody(int fd);
 		void debug();
+
+		private:
+			bool startCgiForClient(int fd, ActionRequest const& action);
+			bool advanceCgiForClient(int fd);
 };
 
 //============(UTILS)====================//
