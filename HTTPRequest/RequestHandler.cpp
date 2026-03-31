@@ -1,5 +1,6 @@
 #include "RequestHandler.hpp"
 #include "CgiManager.hpp"
+#include "RequestAction.hpp"
 #include "RequestUtils.hpp"
 #include <sstream>
 #include <fstream>
@@ -331,22 +332,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 
 		if (!buildFilePath(root, request.path, location, server, filePath))
 			return buildErrorResponse(server, 403, request.path);
-		if (CgiManager::isCgiRequest(filePath, location))
-		{
-			std::string extension = getFileExtension(filePath);
-			std::string interpreter = CgiManager::getCgiInterpreter(extension, location);
-			CgiResult cgiResult;
 
-			if (interpreter.empty())
-				return buildErrorResponse(server, 500, filePath);
-
-			cgiResult = CgiManager::execute(request, server,
-				location, filePath, interpreter);
-			if (!cgiResult.success)
-				return buildErrorResponse(server, 500, filePath);
-			applyHeadLogic(cgiResult.response, request);
-			return cgiResult.response;
-		}
 		if (isDirectory(filePath))
 		{
 			std::string indexPath = joinPath(filePath,
@@ -392,22 +378,6 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 
 		if (!buildFilePath(root, request.path, location, server, filePath))
 			return buildErrorResponse(server, 403, request.path);
-
-		if (CgiManager::isCgiRequest(filePath, location))
-		{
-			std::string extension = getFileExtension(filePath);
-			std::string interpreter = CgiManager::getCgiInterpreter(extension, location);
-			CgiResult cgiResult;
-
-			if (interpreter.empty())
-				return buildErrorResponse(server, 500, filePath);
-
-			cgiResult = CgiManager::execute(request, server,
-				location, filePath, interpreter);
-			if (!cgiResult.success)
-				return buildErrorResponse(server, 500, filePath);
-			return cgiResult.response;
-		}
 
 		filePath = buildUniqueUploadPath(server, location);
 		if (!writeFileContent(filePath, request.body))
@@ -480,6 +450,12 @@ ActionRequest RequestHandler::resolveAction(HttpRequest const& request,
 		&& buildFilePath(root, request.path, location, server, filePath)
 		&& CgiManager::isCgiRequest(filePath, location))
 	{
+		if (!pathExists(filePath))
+		{
+			action.type = ACTION_IMMEDIATE_RESPONSE;
+			action.response = buildErrorResponse(server, 404, filePath);
+			return action;
+		}
 		extension = getFileExtension(filePath);
 		action.interpreter = CgiManager::getCgiInterpreter(extension, location);
 		if (action.interpreter.empty())
