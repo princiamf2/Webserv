@@ -10,6 +10,8 @@ int main(int ac, char **av)
 	}
 
 	std::vector<ServerConfig> configs = parseConfig(av[1]);
+	if (configs.empty())
+		return (1);
 	Core C(configs);
 	C.debug();
 	C.runPoll();

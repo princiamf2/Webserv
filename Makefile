@@ -26,6 +26,8 @@ SRCSHTTP = $(H)HttpParser.cpp \
 			$(H)HttpModule.cpp\
 			$(H)HttpResponseBuilder.cpp\
 			$(H)RequestHandler.cpp\
+			$(H)CgiManager.cpp\
+			$(H)RequestUtils.cpp\
 
 OBJSHTTP = $(SRCSHTTP:.cpp=.o)
 

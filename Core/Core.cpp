@@ -75,6 +75,14 @@ void Core::runPoll()
 				i--;
 				continue;
 			}
+
+			if ((_pollFds[i].events & POLLHUP) && _fdToClient.count(fd))
+			{
+				closeClient(fd);
+				size--;
+				i--;
+				continue;
+			}
 			if (_fdToServer.count(fd) && (_pollFds[i].revents & POLLIN)) // new connection
 			{
 				acceptClient(fd);
@@ -84,13 +92,17 @@ void Core::runPoll()
 			{
 				if (_pollFds[i].revents & POLLIN)
 					_fdToClient[fd]->readClient(fd);
-				if (_pollFds[i].revents & POLLOUT)
+				if (_fdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
 					_fdToClient[fd]->writeClient(fd);
 			}
-			if (_fdToClient[fd]->clientHasData(fd))
-				_pollFds[i].events |= POLLOUT;
+			if (_fdToClient.count(fd))
+			{
+				_pollFds[i].events = POLLIN;
+				if (_fdToClient[fd]->clientHasData(fd))
+					_pollFds[i].events |= POLLOUT;
+			}
 
-			if (_fdToClient[fd]->clientToClose(fd))
+			if (_fdToClient.count(fd) && _fdToClient[fd]->clientToClose(fd))
 			{
 				closeClient(fd);
 				size--;
