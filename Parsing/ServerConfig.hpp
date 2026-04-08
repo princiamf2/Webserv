@@ -17,8 +17,9 @@ struct ServerConfig
 	std::map<int, std::string> error_pages; //code d'erreur + chemin (page 404 par exemple)
 	unsigned int client_max_body_size; //taille max du corps de la requete
 	std::vector <Location> locations; //liste des locations pour ce serveur
+	bool client_max_body_size_set; //indique si client_max_body_size a déjà été assigné
 
-	ServerConfig() : client_max_body_size(0) {} //CPP 98
+	ServerConfig() : client_max_body_size(0), client_max_body_size_set(false) {} //CPP 98
 };
 
 #endif 

@@ -3,6 +3,7 @@
 //====================(INCLUDES)============================//
 #include <iostream>
 #include <sys/socket.h>
+#include <sys/poll.h>
 #include <poll.h>
 #include <fcntl.h>
 #include <netinet/in.h>

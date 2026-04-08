@@ -86,6 +86,7 @@ void Server::addClient(int fd)
 	c.fd = fd;
 	c.toClose = false;
 	c.waitingBody = false;
+	c.cgiActive = false;
 	c.lastActivity = time(NULL);
 	_clients[fd] = c;
 }
@@ -100,6 +101,64 @@ bool Server::clientTimedOut(int fd, time_t now, int timeout)
 	return (now - _clients[fd].lastActivity > timeout);
 }
 
+bool Server::startCgiForClient (int fd, ActionRequest const& action)
+{
+	Client& client = _clients[fd];
+	if (!CgiManager::startProcess(client.cgi, action.request, _conf, action.location, action.scriptPath, action.interpreter))
+		return false;
+	client.cgiActive = true;
+	return true;
+}
+
+bool Server::advanceCgiForClient (int fd)
+{
+	Client& client = _clients[fd];
+	CgiResult result;
+
+	if (!client.cgiActive)
+		return true;
+	if (!client.cgi.stdinClosed)
+	{
+		if (!CgiManager::writeInput(client.cgi))
+		{
+			CgiManager::cleanupProcess(client.cgi);
+			client.cgiActive = false;
+			client.writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 500, "cgi write failed"));
+			return false;
+		}
+	}
+	if (!client.cgi.stdoutClosed)
+	{
+		if (!CgiManager::readOutput(client.cgi))
+		{
+			CgiManager::cleanupProcess(client.cgi);
+			client.cgiActive = false;
+			client.writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 500, "cgi read failed"));
+			return false;
+		}
+	}
+	if (!CgiManager::checkChild(client.cgi))
+	{
+		CgiManager::cleanupProcess(client.cgi);
+		client.cgiActive = false;
+		client.writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 500, "cgi waitpid failed"));
+		return false;
+	}
+	if (client.cgi.stdoutClosed && client.cgi.childExited)
+	{
+		result = CgiManager::buildFinalResult(client.cgi);
+		CgiManager::cleanupProcess(client.cgi);
+		client.cgiActive = false;
+		if (!result.success)
+		{
+			client.writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 500, "cgi execution failed"));
+			return false;
+		}
+		client.writeBuf = HttpResponseBuilder::buildResponse(result.response);
+	}
+	return true;
+}
+
 void Server::readClient(int fd)
 {
 	char	buf[4096];
@@ -107,7 +166,13 @@ void Server::readClient(int fd)
 
 	if (bytes <= 0) // 0 = déconnexion, -1 = erreur
 	{
-		_clients[fd].toClose = true; // TODO to handle
+		if (_clients[fd].waitingBody)
+		{
+			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 400, "incomplete request body"));
+			_clients[fd].waitingBody = false;
+		}
+		else
+			_clients[fd].toClose = true; // TODO to handle
 		return ;
 	}
 	_clients[fd].lastActivity = time(NULL);
@@ -134,11 +199,30 @@ void Server::readClient(int fd)
 			return ; // incomplete body
 		}
 	}
-	else
-		std::cout << "lenght not found, sending request" << std::endl;
+	_clients[fd].waitingBody = false;
+	try
+	{
+		HttpRequest request = HttpParser::parseRequest(_clients[fd].readBuf);
+		Location const* location = findBestLocation(_conf, request.path);
+		ActionRequest action = RequestHandler::resolveAction(request, _conf, location);
 
-	std::string response = handleRawHttpRequest(_clients[fd].readBuf, _conf);
-	_clients[fd].writeBuf = response;
+		if (action.type == ACTION_START_CGI)
+		{
+			if (!startCgiForClient(fd, action))
+			{
+				_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+					buildErrorResponse(_conf, 500, action.scriptPath));
+			}
+		}
+		else
+			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(action.response);
+	}
+	catch (std::exception const& e)
+	{
+		(void)e;
+		_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+			buildErrorResponse(_conf, 400, "bad request"));
+	}
 	_clients[fd].readBuf.clear();
 
 	// VVV hard code for test VVV
@@ -152,6 +236,9 @@ void Server::readClient(int fd)
 
 void Server::writeClient(int fd)
 {
+	if (_clients[fd].cgiActive)
+		advanceCgiForClient(fd);
+
 	if (_clients[fd].writeBuf.empty())
 		return ;
 
@@ -163,12 +250,14 @@ void Server::writeClient(int fd)
 		return ;
 	}
 	_clients[fd].writeBuf.erase(0, bytes); // remove only added bytes
+	if (_clients[fd].writeBuf.empty())
+		_clients[fd].toClose = true;
 	_clients[fd].lastActivity = time(NULL);
 }
 
 bool Server::clientHasData(int fd)
 {
-	return (!_clients[fd].writeBuf.empty());
+	return (!_clients[fd].writeBuf.empty() || _clients[fd].cgiActive);
 }
 
 Server::~Server()

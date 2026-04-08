@@ -3,6 +3,7 @@
 //====================(INCLUDES)============================//
 #include <iostream>
 #include <sys/socket.h>
+#include "../HTTPRequest/CgiProcess.hpp"
 #include <poll.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -15,6 +16,13 @@
 #include "../Parsing/Location.hpp"
 #include "../Parsing/ParseConfig.hpp"
 #include "../HTTPRequest/HttpModule.hpp"
+#include "../HTTPRequest/HttpParser.hpp"
+#include "../HTTPRequest/HttpResponse.hpp"
+#include "../HTTPRequest/RequestHandler.hpp"
+#include "../HTTPRequest/CgiManager.hpp"
+#include "../HTTPRequest/RequestUtils.hpp"
+#include "../HTTPRequest/HttpResponseBuilder.hpp"
+
 
 
 //====================(DEFINES)=============================//
@@ -32,6 +40,9 @@ struct Client {
 	std::string writeBuf;     // to send
 	time_t      lastActivity;  // for incomplete requests
 	bool        waitingBody;
+	bool		cgiActive;
+	CgiProcess	cgi;
+
 	///////////////////////////////////////////////////////////////bool si cgi actif et process
 	// others : adresse IP, config serveur associée, etc
 };
@@ -53,6 +64,8 @@ class Server
 		std::vector<int>            _listenFds;         // fds lisned to
 		std::map<int, Client>       _clients;           // fds -> client they correspond
 		bool                        _autoindex;         // page autoindex or not
+		bool                        startCgiForClient(int fd, ActionRequest const& action);
+		bool                        advanceCgiForClient(int fd);
 
 	public:
 		Server(ServerConfig serv);
