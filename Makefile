@@ -4,8 +4,7 @@ CXX = c++
 CXXFLAGS = -Wall -Wextra -Werror #-std=c++98
 
 C = ./Core/
-SRCSCORE = $C$(NAME).cpp\
-			$CCore.cpp\
+SRCSCORE =  $CCore.cpp\
 			$CServer.cpp\
 			$Cmain.cpp\
 			$Cutils.cpp\
