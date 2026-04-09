@@ -123,55 +123,6 @@ bool Server::startCgiForClient (int fd, ActionRequest const& action)
 	return true;
 }
 
-bool Server::advanceCgiForClient (int fd)
-{
-	Client& client = _clients[fd];
-	CgiResult result;
-
-	if (!client.cgiActive)
-		return true;
-	if (!client.cgi.stdinClosed)
-	{
-		if (!CgiManager::writeInput(client.cgi))
-		{
-			CgiManager::cleanupProcess(client.cgi);
-			client.cgiActive = false;
-			client.writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 500, "cgi write failed"));
-			return false;
-		}
-	}
-	if (!client.cgi.stdoutClosed)
-	{
-		if (!CgiManager::readOutput(client.cgi))
-		{
-			CgiManager::cleanupProcess(client.cgi);
-			client.cgiActive = false;
-			client.writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 500, "cgi read failed"));
-			return false;
-		}
-	}
-	if (!CgiManager::checkChild(client.cgi))
-	{
-		CgiManager::cleanupProcess(client.cgi);
-		client.cgiActive = false;
-		client.writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 500, "cgi waitpid failed"));
-		return false;
-	}
-	if (client.cgi.stdoutClosed && client.cgi.childExited)
-	{
-		result = CgiManager::buildFinalResult(client.cgi);
-		CgiManager::cleanupProcess(client.cgi);
-		client.cgiActive = false;
-		if (!result.success)
-		{
-			client.writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 500, "cgi execution failed"));
-			return false;
-		}
-		client.writeBuf = HttpResponseBuilder::buildResponse(result.response);
-	}
-	return true;
-}
-
 void Server::readClient(int fd)
 {
 	char	buf[4096];
@@ -249,9 +200,6 @@ void Server::readClient(int fd)
 
 void Server::writeClient(int fd)
 {
-	if (_clients[fd].cgiActive)
-		advanceCgiForClient(fd);
-
 	if (_clients[fd].writeBuf.empty())
 		return ;
 
