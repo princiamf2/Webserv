@@ -64,6 +64,8 @@ class Server
 		std::vector<int>            _listenFds;         // fds lisned to
 		std::map<int, Client>       _clients;           // fds -> client they correspond
 		bool                        _autoindex;         // page autoindex or not
+		bool                        startCgiForClient(int fd, ActionRequest const& action);
+		bool                        advanceCgiForClient(int fd);
 
 	public:
 		Server(ServerConfig serv);
@@ -79,9 +81,10 @@ class Server
 		void        closeClient(int fd);                // close connection to client
 		bool        clientHasData(int fd);              // does a responce for the client exist
 		std::vector<int>& getListenFds(void);           // getter for fds
-		std::map<int, Client>&     getClients(void);                    // getter for clients
+		std::map<int, Client>&     getClients(void);    // getter for clients
 		bool        clientToClose(int fd);              // getter pour les toClose
 		bool clientWaitingBody(int fd);
+		void finalizeCgi(int clientFd);
 		void debug();
 
 		private:
