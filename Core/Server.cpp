@@ -76,6 +76,19 @@ int Server::init(void)
 	return (SUCCESS);
 }
 
+void Server::finalizeCgi(int clientFd)
+{
+	CgiManager::checkChild(_clients[clientFd].cgi);
+	CgiResult result = CgiManager::buildFinalResult(_clients[clientFd].cgi);
+	CgiManager::cleanupProcess(_clients[clientFd].cgi);
+	_clients[clientFd].cgiActive = false;
+	if (!result.success)
+		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(
+			buildErrorResponse(_conf, 500, "cgi failed"));
+	else
+		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(result.response);
+}
+
 bool Server::clientWaitingBody(int fd)
 {
 	return (_clients[fd].waitingBody);
