@@ -86,10 +86,6 @@ class Server
 		bool clientWaitingBody(int fd);
 		void finalizeCgi(int clientFd);
 		void debug();
-
-		private:
-			bool startCgiForClient(int fd, ActionRequest const& action);
-			bool advanceCgiForClient(int fd);
 };
 
 //============(UTILS)====================//
