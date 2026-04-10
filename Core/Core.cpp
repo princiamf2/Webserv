@@ -84,7 +84,7 @@ void Core::runPoll()
 
 			int fd = _pollFds[i].fd;
 
-			if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
+			if (_pollFds[i].revents & (POLLERR |  POLLNVAL))
 			{
 				if (_cgiReadFdToClient.count(fd))
 				{
@@ -109,25 +109,12 @@ void Core::runPoll()
 				continue;
 			}
 
-
-
-
-
-
-
-
-
-
-
-
-
 			if (_fdToClient.count(fd)) // a client is actif
 			{
 				if (_pollFds[i].revents & POLLIN)
 				{
-					_fdToClient[fd]->readClient(fd);
+					_fdToClient[fd]->readClient(fd, this);
 					Client &clt = _fdToClient[fd]->getClients()[fd];
-					std::cout << RED << "aaaaaaaaaaaaaaaaaaaaaaaa" << clt.cgiActive << RESET << std::endl;
 					if (clt.cgiActive)
 						registerCgi(clt.fd, clt.cgi.stdinFd, clt.cgi.stdoutFd);
 				}

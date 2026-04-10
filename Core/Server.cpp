@@ -123,8 +123,8 @@ bool Server::startCgiForClient (int fd, ActionRequest const& action)
 	client.cgiActive = true;
 	return true;
 }
-
-void Server::readClient(int fd)
+#include "Core.hpp"
+void Server::readClient(int fd, Core *core)
 {
 	char	buf[4096];
 	ssize_t bytes = recv(fd, buf, sizeof(buf), 0);
@@ -176,6 +176,8 @@ void Server::readClient(int fd)
 			if (!startCgiForClient(fd, action))
 				_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 					buildErrorResponse(_conf, 500, action.scriptPath));
+			else
+				core->registerCgi(_clients[fd].fd, _clients[fd].cgi.stdinFd, _clients[fd].cgi.stdoutFd);
 		}
 		else
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(action.response);
