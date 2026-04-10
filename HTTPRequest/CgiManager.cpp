@@ -327,6 +327,7 @@ bool CgiManager::startProcess(CgiProcess& process,
 	char** envp;
 	char* argv[3];
 	std::string scriptDir;
+	std::string scriptName;
 
 	if (pipe(inputPipe) == -1)
 		return false;
@@ -360,13 +361,14 @@ bool CgiManager::startProcess(CgiProcess& process,
 		close(outputPipe[1]);
 
 		scriptDir = getDirectoryPath(scriptPath);
+		scriptName = getScriptName(scriptPath);
 		if (chdir(scriptDir.c_str()) == -1)
 			std::exit(1);
 
 		envp = buildCgiEnv(request, server, location, scriptPath);
 
 		argv[0] = const_cast<char*>(interpreter.c_str());
-		argv[1] = const_cast<char*>(scriptPath.c_str());
+		argv[1] = const_cast<char*>(scriptName.c_str());
 		argv[2] = NULL;
 
 		execve(argv[0], argv, envp);
