@@ -32,11 +32,11 @@ static bool parseLocation_Root(std::istringstream& locationStream, Location& loc
         return false;
     }
 
-    if (root_path[0] != '/')
-    {
-        std::cerr << "ERROR: LOCATION ROOT MUST START BY '/'" << std::endl;
-        return false;
-    }
+    // if (root_path[0] != '/')
+    // {
+    //     std::cerr << "ERROR: LOCATION ROOT MUST START BY '/'" << std::endl;
+    //     return false;
+    // }
 
     if (root_path.find("..") != std::string::npos)
     {
@@ -225,11 +225,11 @@ static bool parseLocation_UploadDir(std::istringstream& locationStream, Location
         return false;
     }
 
-    if (upload_dir[0] != '/')
-    {
-        std::cerr << "ERROR: WRONG UPLOAD_DIR MUST START BY '/'" << std::endl;
-        return false;
-    }
+    // if (upload_dir[0] != '/')
+    // {
+    //     std::cerr << "ERROR: WRONG UPLOAD_DIR MUST START BY '/'" << std::endl;
+    //     return false;
+    // }
 
     if (upload_dir.find("..") != std::string::npos)
     {
