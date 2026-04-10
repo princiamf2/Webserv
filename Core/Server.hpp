@@ -3,6 +3,7 @@
 //====================(INCLUDES)============================//
 #include <iostream>
 #include <sys/socket.h>
+#include "../HTTPRequest/CgiProcess.hpp"
 #include <poll.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -15,19 +16,34 @@
 #include "../Parsing/Location.hpp"
 #include "../Parsing/ParseConfig.hpp"
 #include "../HTTPRequest/HttpModule.hpp"
+#include "../HTTPRequest/HttpParser.hpp"
+#include "../HTTPRequest/HttpResponse.hpp"
+#include "../HTTPRequest/RequestHandler.hpp"
+#include "../HTTPRequest/CgiManager.hpp"
+#include "../HTTPRequest/RequestUtils.hpp"
+#include "../HTTPRequest/HttpResponseBuilder.hpp"
+
 
 
 //====================(DEFINES)=============================//
 # define SUCCESS 1
 # define FAIL 0
+# define TIMEOUT 60
+# define BODYTO 10
 
 //====================(STRUCTS)=============================//
 // client
 struct Client {
 	int         fd;
 	bool        toClose;
-	std::string readBuf;   // recieve
-	std::string writeBuf;  // to send
+	std::string readBuf;      // recieve
+	std::string writeBuf;     // to send
+	time_t      lastActivity;  // for incomplete requests
+	bool        waitingBody;
+	bool		cgiActive;
+	CgiProcess	cgi;
+
+	///////////////////////////////////////////////////////////////bool si cgi actif et process
 	// others : adresse IP, config serveur associée, etc
 };
 
@@ -48,6 +64,8 @@ class Server
 		std::vector<int>            _listenFds;         // fds lisned to
 		std::map<int, Client>       _clients;           // fds -> client they correspond
 		bool                        _autoindex;         // page autoindex or not
+		bool                        startCgiForClient(int fd, ActionRequest const& action);
+		bool                        advanceCgiForClient(int fd);
 
 	public:
 		Server(ServerConfig serv);
@@ -57,12 +75,16 @@ class Server
 		int         init(void);                         // init of the binds listen etc
 		void        addClient(int fd);                  // add a client to fds list
 		void        removeClient(int fd);
+		bool        clientTimedOut(int fd, time_t now, int timeout);
 		void        readClient(int fd);                 // read what client sent
 		void        writeClient(int fd);                // write to the client
 		void        closeClient(int fd);                // close connection to client
 		bool        clientHasData(int fd);              // does a responce for the client exist
 		std::vector<int>& getListenFds(void);           // getter for fds
+		std::map<int, Client>&     getClients(void);    // getter for clients
 		bool        clientToClose(int fd);              // getter pour les toClose
+		bool clientWaitingBody(int fd);
+		void finalizeCgi(int clientFd);
 		void debug();
 };
 

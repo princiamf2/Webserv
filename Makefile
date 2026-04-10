@@ -4,8 +4,7 @@ CXX = c++
 CXXFLAGS = -Wall -Wextra -Werror #-std=c++98
 
 C = ./Core/
-SRCSCORE = $C$(NAME).cpp\
-			$CCore.cpp\
+SRCSCORE =  $CCore.cpp\
 			$CServer.cpp\
 			$Cmain.cpp\
 			$Cutils.cpp\
@@ -27,6 +26,7 @@ SRCSHTTP = $(H)HttpParser.cpp \
 			$(H)HttpResponseBuilder.cpp\
 			$(H)RequestHandler.cpp\
 			$(H)CgiManager.cpp\
+			$(H)RequestUtils.cpp\
 
 OBJSHTTP = $(SRCSHTTP:.cpp=.o)
 

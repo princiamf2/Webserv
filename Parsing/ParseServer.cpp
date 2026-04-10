@@ -78,11 +78,11 @@ static bool parseServer_Root(std::istringstream& lineStream, ServerConfig& serve
         return false;
     }
 
-    if (value[0] != '/')
-    {
-        std::cerr << "ERROR: ROOT MUST START BY '/'" << std::endl;
-        return false;
-    }
+    // if (value[0] != '/')
+    // {
+    //     std::cerr << "ERROR: ROOT MUST START BY '/'" << std::endl;
+    //     return false;
+    // }
 
     if (value.find("..") != std::string::npos)
     {
