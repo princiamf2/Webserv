@@ -49,6 +49,8 @@ struct Client {
 
 //====================(DECLARATIONS)========================//
 
+class Core;
+
 class Server
 {
 	private:
@@ -75,7 +77,7 @@ class Server
 		void        addClient(int fd);                  // add a client to fds list
 		void        removeClient(int fd);
 		bool        clientTimedOut(int fd, time_t now, int timeout);
-		void        readClient(int fd);                 // read what client sent
+		void        readClient(int fd, Core *core);                 // read what client sent
 		void        writeClient(int fd);                // write to the client
 		void        closeClient(int fd);                // close connection to client
 		bool        clientHasData(int fd);              // does a responce for the client exist

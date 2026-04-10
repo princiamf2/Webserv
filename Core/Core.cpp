@@ -55,7 +55,7 @@ void Core::runPoll()
 		{
 			int clientFd = it->first;
 			Server* srv = it->second;
-		
+
 			int timeout = srv->clientWaitingBody(clientFd) ? BODYTO : TIMEOUT;
 			if (srv->clientTimedOut(clientFd, now, timeout))
 				toClose.push_back(clientFd);
@@ -85,15 +85,7 @@ void Core::runPoll()
 
 			int fd = _pollFds[i].fd;
 
-			if (_pollFds[i].revents & (POLLERR | POLLNVAL))
-			{
-				closeClient(fd);
-				size--;
-				i--;
-				continue;
-			}
-
-			if ((_pollFds[i].events & POLLHUP) && _fdToClient.count(fd))
+			if (_pollFds[i].revents & (POLLERR |  POLLNVAL))
 			{
 				if (_cgiReadFdToClient.count(fd))
 				{
@@ -112,23 +104,20 @@ void Core::runPoll()
 				size--; i--;
 				continue;
 			}
-			if ((_pollFds[i].events & POLLHUP) && _fdToClient.count(fd))
-			{
-				closeClient(fd);
-				size--;
-				i--;
-				continue;
-			}
 			if (_fdToServer.count(fd) && (_pollFds[i].revents & POLLIN)) // new connection
 			{
 				acceptClient(fd);
 				continue;
 			}
+
 			if (_fdToClient.count(fd)) // a client is actif
 			{
 				if (_pollFds[i].revents & POLLIN)
 				{
-					_fdToClient[fd]->readClient(fd);
+					_fdToClient[fd]->readClient(fd, this);
+					Client &clt = _fdToClient[fd]->getClients()[fd];
+					if (clt.cgiActive)
+						registerCgi(clt.fd, clt.cgi.stdinFd, clt.cgi.stdoutFd);
 				}
 				if (_fdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
 					_fdToClient[fd]->writeClient(fd);
@@ -146,15 +135,6 @@ void Core::runPoll()
 				size--;
 				i--;
 			}
-
-
-
-
-
-
-
-
-
 			// Pipe stdin CGI prêt en écriture
 			if (_cgiWriteFdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
 			{
@@ -171,14 +151,14 @@ void Core::runPoll()
 					i--;
 				}
 			}
-			
+
 			// Pipe stdout CGI prêt en lecture
 			if (_cgiReadFdToClient.count(fd) && (_pollFds[i].revents & POLLIN))
 			{
 				int clientFd = _cgiReadFdToClient[fd];
 				CgiManager::readOutput(_fdToClient[clientFd]->getClients()[clientFd].cgi);
 			}
-			
+
 			// Pipe stdout CGI fermé -> CGI terminé
 			if (_cgiReadFdToClient.count(fd) && (_pollFds[i].revents & POLLHUP))
 			{
@@ -189,6 +169,7 @@ void Core::runPoll()
 				size--;
 				i--;
 			}
+
 		}
 	}
 }
