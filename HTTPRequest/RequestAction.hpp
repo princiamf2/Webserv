@@ -3,7 +3,7 @@
 
 #include "HttpRequest.hpp"
 #include "HttpResponse.hpp"
-#include "RequestHandler.hpp"
+#include "../Parsing/Location.hpp"
 
 enum ActionRequestType
 {

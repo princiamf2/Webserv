@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   CgiManager.cpp                                     :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
+/*   Updated: 2026/04/09 19:51:15 by michel           ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "CgiManager.hpp"
 
 #include <sys/types.h>
@@ -209,6 +221,23 @@ int CgiManager::parseCgiStatusCode(const std::string& value)
 	return code;
 }
 
+static std::string normalizeHeaderKey(const std::string& key)
+{
+	std::string lower = key;
+	for (size_t i = 0; i < lower.size(); ++i)
+		lower[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lower[i])));
+
+	if (lower == "content-type")
+		return "Content-Type";
+	if (lower == "content-length")
+		return "Content-Length";
+	if (lower == "location")
+		return "Location";
+	if (lower == "status")
+		return "Status";
+	return key;
+}
+
 HttpResponse CgiManager::buildResponseFromCgiOutput(const std::string& output)
 {
 	HttpResponse response;
@@ -254,7 +283,7 @@ HttpResponse CgiManager::buildResponseFromCgiOutput(const std::string& output)
 		if (colonPos == std::string::npos)
 			continue;
 
-		key = trim(line.substr(0, colonPos));
+		key = normalizeHeaderKey(trim(line.substr(0, colonPos)));
 		value = trim(line.substr(colonPos + 1));
 
 		if (key.empty())
@@ -463,48 +492,4 @@ void CgiManager::cleanupProcess(CgiProcess& process)
 	process.stdoutFd = -1;
 	process.stdinClosed = true;
 	process.stdoutClosed = true;
-}
-
-CgiResult CgiManager::execute(const HttpRequest& request,
-	const ServerConfig& server,
-	const Location* location,
-	const std::string& scriptPath,
-	const std::string& interpreter)
-{
-	CgiProcess process;
-	CgiResult result;
-
-	if (!startProcess(process, request, server, location, scriptPath, interpreter))
-		return result;
-
-	while (!process.stdoutClosed || !process.childExited)
-	{
-		if (!process.stdinClosed)
-		{
-			if (!writeInput(process))
-			{
-				cleanupProcess(process);
-				waitpid(process.pid, NULL, 0);
-				return result;
-			}
-		}
-		if (!process.stdoutClosed)
-		{
-			if (!readOutput(process))
-			{
-				cleanupProcess(process);
-				waitpid(process.pid, NULL, 0);
-				return result;
-			}
-		}
-		if (!checkChild(process))
-		{
-			cleanupProcess(process);
-			return result;
-		}
-	}
-
-	result = buildFinalResult(process);
-	cleanupProcess(process);
-	return result;
 }

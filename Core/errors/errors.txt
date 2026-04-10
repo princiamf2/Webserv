@@ -1,0 +1,40 @@
+
+
+on ctrl c:
+
+==2548723==
+==2548723== Process terminating with default action of signal 2 (SIGINT)
+==2548723==    at 0x4D3B3BE: __internal_syscall_cancel (cancellation.c:64)
+==2548723==    by 0x4D3B3E3: __syscall_cancel (cancellation.c:75)
+==2548723==    by 0x4DB4DAD: poll (poll.c:29)
+==2548723==    by 0x4017F67: Core::runPoll() (in /home/l/42/Webserv/webserv)
+==2548723==    by 0x4024D24: main (in /home/l/42/Webserv/webserv)
+==2548723==
+==2548723== FILE DESCRIPTORS: 7 open (5 inherited) at exit.
+==2548723== Open AF_INET socket 6: 127.0.0.1:9090 <-> <unbound>
+==2548723==    at 0x4DC407B: socket (syscall-template.S:120)
+==2548723==    by 0x401DC35: Server::init() (in /home/l/42/Webserv/webserv)
+==2548723==    by 0x4017B92: Core::Core(std::vector<ServerConfig, std::allocator<ServerConfig> >) (in /home/l/42/Webserv/webserv)
+==2548723==    by 0x4024CF7: main (in /home/l/42/Webserv/webserv)
+==2548723==
+==2548723== Open AF_INET socket 5: 127.0.0.1:8080 <-> <unbound>
+==2548723==    at 0x4DC407B: socket (syscall-template.S:120)
+==2548723==    by 0x401DC35: Server::init() (in /home/l/42/Webserv/webserv)
+==2548723==    by 0x4017B92: Core::Core(std::vector<ServerConfig, std::allocator<ServerConfig> >) (in /home/l/42/Webserv/webserv)
+==2548723==    by 0x4024CF7: main (in /home/l/42/Webserv/webserv)
+==2548723==
+==2548723==
+==2548723== HEAP SUMMARY:
+==2548723==     in use at exit: 82,119 bytes in 75 blocks
+==2548723==   total heap usage: 271 allocs, 196 frees, 108,653 bytes allocated
+==2548723==
+==2548723== LEAK SUMMARY:
+==2548723==    definitely lost: 0 bytes in 0 blocks
+==2548723==    indirectly lost: 0 bytes in 0 blocks
+==2548723==      possibly lost: 0 bytes in 0 blocks
+==2548723==    still reachable: 82,119 bytes in 75 blocks
+==2548723==         suppressed: 0 bytes in 0 blocks
+==2548723== Rerun with --leak-check=full to see details of leaked memory
+==2548723==
+==2548723== For lists of detected and suppressed errors, rerun with: -s
+==2548723== ERROR SUMMARY: 2 errors from 2 contexts (suppressed: 0 from 0)
