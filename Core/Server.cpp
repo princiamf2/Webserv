@@ -82,6 +82,7 @@ void Server::finalizeCgi(int clientFd)
 	CgiResult result = CgiManager::buildFinalResult(_clients[clientFd].cgi);
 	CgiManager::cleanupProcess(_clients[clientFd].cgi);
 	_clients[clientFd].cgiActive = false;
+	std::cout << result.rawOutput << std::endl;
 	if (!result.success)
 		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(
 			buildErrorResponse(_conf, 500, "cgi failed"));
@@ -122,8 +123,8 @@ bool Server::startCgiForClient (int fd, ActionRequest const& action)
 	client.cgiActive = true;
 	return true;
 }
-
-void Server::readClient(int fd)
+#include "Core.hpp"
+void Server::readClient(int fd, Core *core)
 {
 	char	buf[4096];
 	ssize_t bytes = recv(fd, buf, sizeof(buf), 0);
@@ -136,7 +137,7 @@ void Server::readClient(int fd)
 			_clients[fd].waitingBody = false;
 		}
 		else
-			_clients[fd].toClose = true; // TODO to handle
+			_clients[fd].toClose = true;
 		return ;
 	}
 	_clients[fd].lastActivity = time(NULL);
@@ -173,10 +174,10 @@ void Server::readClient(int fd)
 		if (action.type == ACTION_START_CGI)
 		{
 			if (!startCgiForClient(fd, action))
-			{
 				_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 					buildErrorResponse(_conf, 500, action.scriptPath));
-			}
+			else
+				core->registerCgi(_clients[fd].fd, _clients[fd].cgi.stdinFd, _clients[fd].cgi.stdoutFd);
 		}
 		else
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(action.response);
@@ -188,14 +189,8 @@ void Server::readClient(int fd)
 			buildErrorResponse(_conf, 400, "bad request"));
 	}
 	_clients[fd].readBuf.clear();
+	return ;
 
-	// VVV hard code for test VVV
-	// std::string response =
-	//		"HTTP/1.1 200 OK\r\n"
-	//		"Content-Length: 13\r\n"
-	//		"Content-Type: text/plain\r\n"
-	//		"\r\n"
-	//		"Hello World!\n";
 }
 
 void Server::writeClient(int fd)

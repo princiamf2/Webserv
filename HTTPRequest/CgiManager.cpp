@@ -465,6 +465,7 @@ bool CgiManager::checkChild(CgiProcess& process)
 	return true;
 }
 
+	#include <iostream>
 CgiResult CgiManager::buildFinalResult(CgiProcess& process)
 {
 	CgiResult result;
