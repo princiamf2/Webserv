@@ -21,6 +21,7 @@
 # define SUCCESS 1
 # define FAIL 0
 # define TIMEOUT 60
+# define BODYTO 10
 
 //====================(STRUCTS)=============================//
 

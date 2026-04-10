@@ -6,7 +6,7 @@
 /*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/04/10 16:18:36 by malapoug         ###   ########.fr       */
+/*   Updated: 2026/04/10 16:48:40 by malapoug         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -472,10 +472,8 @@ CgiResult CgiManager::buildFinalResult(CgiProcess& process)
 
 	result.rawOutput = process.outputBuffer;
 
-	std::cout << "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" << std::endl;
 	if (!process.childExited)
 		return result;
-	std::cout << "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" << std::endl;
 	if (!WIFEXITED(process.exitStatus) || WEXITSTATUS(process.exitStatus) != 0)
 		return result;
 	if (result.rawOutput.empty())
