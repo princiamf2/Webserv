@@ -95,12 +95,23 @@ void Core::runPoll()
 
 			if ((_pollFds[i].events & POLLHUP) && _fdToClient.count(fd))
 			{
-				closeClient(fd);
-				size--;
-				i--;
+				if (_cgiReadFdToClient.count(fd))
+				{
+					int clientFd = _cgiReadFdToClient[fd];
+					_fdToClient[clientFd]->finalizeCgi(clientFd);
+					_cgiReadFdToClient.erase(fd);
+					_pollFds.erase(_pollFds.begin() + i);
+				}
+				else if (_cgiWriteFdToClient.count(fd))
+				{
+					_cgiWriteFdToClient.erase(fd);
+					_pollFds.erase(_pollFds.begin() + i);
+				}
+				else
+					closeClient(fd);
+				size--; i--;
 				continue;
 			}
-
 			if ((_pollFds[i].events & POLLHUP) && _fdToClient.count(fd))
 			{
 				closeClient(fd);
@@ -116,7 +127,9 @@ void Core::runPoll()
 			if (_fdToClient.count(fd)) // a client is actif
 			{
 				if (_pollFds[i].revents & POLLIN)
+				{
 					_fdToClient[fd]->readClient(fd);
+				}
 				if (_fdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
 					_fdToClient[fd]->writeClient(fd);
 			}

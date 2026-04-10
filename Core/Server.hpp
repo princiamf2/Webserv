@@ -65,7 +65,6 @@ class Server
 		std::map<int, Client>       _clients;           // fds -> client they correspond
 		bool                        _autoindex;         // page autoindex or not
 		bool                        startCgiForClient(int fd, ActionRequest const& action);
-		bool                        advanceCgiForClient(int fd);
 
 	public:
 		Server(ServerConfig serv);
