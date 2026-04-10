@@ -22,7 +22,7 @@ static bool locationMatches(std::string const& requestPath, std::string const& l
 	return false;
 }
 
-static Location const* findBestLocation(ServerConfig const& server, std::string const& path)
+Location const* findBestLocation(ServerConfig const& server, std::string const& path)
 {
 	Location const* best = NULL;
 	size_t bestLen = 0;
