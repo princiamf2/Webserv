@@ -103,23 +103,33 @@ void Core::runPoll()
 				size--; i--;
 				continue;
 			}
-			if ((_pollFds[i].events & POLLHUP) && _fdToClient.count(fd))
-			{
-				closeClient(fd);
-				size--;
-				i--;
-				continue;
-			}
 			if (_fdToServer.count(fd) && (_pollFds[i].revents & POLLIN)) // new connection
 			{
 				acceptClient(fd);
 				continue;
 			}
+
+
+
+
+
+
+
+
+
+
+
+
+
 			if (_fdToClient.count(fd)) // a client is actif
 			{
 				if (_pollFds[i].revents & POLLIN)
 				{
 					_fdToClient[fd]->readClient(fd);
+					Client &clt = _fdToClient[fd]->getClients()[fd];
+					std::cout << RED << "aaaaaaaaaaaaaaaaaaaaaaaa" << clt.cgiActive << RESET << std::endl;
+					if (clt.cgiActive)
+						registerCgi(clt.fd, clt.cgi.stdinFd, clt.cgi.stdoutFd);
 				}
 				if (_fdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
 					_fdToClient[fd]->writeClient(fd);
@@ -137,15 +147,6 @@ void Core::runPoll()
 				size--;
 				i--;
 			}
-
-
-
-
-
-
-
-
-
 			// Pipe stdin CGI prêt en écriture
 			if (_cgiWriteFdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
 			{
@@ -180,6 +181,7 @@ void Core::runPoll()
 				size--;
 				i--;
 			}
+
 		}
 	}
 }

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   CgiManager.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: malapoug <malapoug@student.42lausanne.ch>  +#+  +:+       +#+        */
+/*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/04/09 14:55:34 by malapoug         ###   ########.fr       */
+/*   Updated: 2026/04/10 16:18:36 by malapoug         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -327,6 +327,7 @@ bool CgiManager::startProcess(CgiProcess& process,
 	char** envp;
 	char* argv[3];
 	std::string scriptDir;
+	std::string scriptName;
 
 	if (pipe(inputPipe) == -1)
 		return false;
@@ -360,13 +361,14 @@ bool CgiManager::startProcess(CgiProcess& process,
 		close(outputPipe[1]);
 
 		scriptDir = getDirectoryPath(scriptPath);
+		scriptName = getScriptName(scriptPath);
 		if (chdir(scriptDir.c_str()) == -1)
 			std::exit(1);
 
 		envp = buildCgiEnv(request, server, location, scriptPath);
 
 		argv[0] = const_cast<char*>(interpreter.c_str());
-		argv[1] = const_cast<char*>(scriptPath.c_str());
+		argv[1] = const_cast<char*>(scriptName.c_str());
 		argv[2] = NULL;
 
 		execve(argv[0], argv, envp);
@@ -463,14 +465,17 @@ bool CgiManager::checkChild(CgiProcess& process)
 	return true;
 }
 
+	#include <iostream>
 CgiResult CgiManager::buildFinalResult(CgiProcess& process)
 {
 	CgiResult result;
 
 	result.rawOutput = process.outputBuffer;
 
+	std::cout << "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" << std::endl;
 	if (!process.childExited)
 		return result;
+	std::cout << "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" << std::endl;
 	if (!WIFEXITED(process.exitStatus) || WEXITSTATUS(process.exitStatus) != 0)
 		return result;
 	if (result.rawOutput.empty())
