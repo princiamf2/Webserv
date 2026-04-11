@@ -241,6 +241,7 @@ bool Server::clientToClose(int fd)
 
 void Server::debug()
 {
+	int n = 0;
 	std::cout << "  host			 : " << _host << std::endl;
 	std::cout << "  root			 : " << _root << std::endl;
 	std::cout << "  index			: " << _index << std::endl;
@@ -266,7 +267,20 @@ void Server::debug()
 	for (std::map<int, std::string>::iterator it = _errorPages.begin(); it != _errorPages.end(); ++it)
 		std::cout << "	" << it->first << " -> " << it->second << std::endl;
 
-	std::cout << "  locations		: " << _locations.size() << " location(s)" << std::endl;
+	std::cout << "  locations        : " << _locations.size() << " location(s)" << std::endl;
+	
+	for (std::vector<Location>::iterator it = _locations.begin(); it != _locations.end(); ++it)
+	{
+		n++;
+	    std::cout << "	" << n << std::endl;
+	    std::cout << "		path: -> " << it->path << std::endl;
+	
+	    // afficher les méthodes autorisées
+	    std::cout << "		methods: " << std::endl;
+	    for (std::set<std::string>::iterator it2 = it->allowed_methods_http.begin();
+	         it2 != it->allowed_methods_http.end(); ++it2)
+	        std::cout << "			- " << *it2 << std::endl;
+	}
 
 	std::cout << "  clients		  : " << _clients.size() << " client(s)" << std::endl;
 	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
