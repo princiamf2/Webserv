@@ -6,12 +6,13 @@
 /*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/04/09 19:51:15 by michel           ###   ########.fr       */
+/*   Updated: 2026/04/11 15:42:41 by michel           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "CgiManager.hpp"
 
+#include <string>
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -21,6 +22,7 @@
 #include <vector>
 #include <map>
 #include <cstddef>
+#include <fcntl.h>
 
 // helper local : phrase HTTP selon code
 static std::string getReasonPhrase(int code)
@@ -328,6 +330,7 @@ bool CgiManager::startProcess(CgiProcess& process,
 	char* argv[3];
 	std::string scriptDir;
 	std::string scriptName;
+	std::string absPath;
 
 	if (pipe(inputPipe) == -1)
 		return false;
@@ -382,6 +385,8 @@ bool CgiManager::startProcess(CgiProcess& process,
 	process.pid = pid;
 	process.stdinFd = inputPipe[1];
 	process.stdoutFd = outputPipe[0];
+	fcntl(process.stdinFd, F_SETFL, fcntl(process.stdinFd, F_GETFL, 0) | O_NONBLOCK);
+	fcntl(process.stdoutFd, F_SETFL, fcntl(process.stdoutFd, F_GETFL, 0) | O_NONBLOCK);
 	process.inputBuffer = request.body;
 	process.inputOffset = 0;
 	process.outputBuffer.clear();
@@ -410,7 +415,11 @@ bool CgiManager::writeInput(CgiProcess& process)
 		process.inputBuffer.size() - process.inputOffset);
 
 	if (written < 0)
+	{
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return true;
 		return false;
+	}
 
 	process.inputOffset += static_cast<size_t>(written);
 
@@ -432,6 +441,12 @@ bool CgiManager::readOutput(CgiProcess& process)
 		return true;
 
 	bytesRead = read(process.stdoutFd, buffer, sizeof(buffer));
+	if (bytesRead < 0)
+	{
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return true;
+		return false;
+	}
 	if (bytesRead > 0)
 	{
 		process.outputBuffer.append(buffer, bytesRead);
