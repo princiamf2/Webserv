@@ -115,9 +115,9 @@ void Core::runPoll()
 				if (_pollFds[i].revents & POLLIN)
 				{
 					_fdToClient[fd]->readClient(fd, this);
-					Client &clt = _fdToClient[fd]->getClients()[fd];
-					if (clt.cgiActive)
-						registerCgi(clt.fd, clt.cgi.stdinFd, clt.cgi.stdoutFd);
+					// Client &clt = _fdToClient[fd]->getClients()[fd];
+					// if (clt.cgiActive)
+					// 	registerCgi(clt.fd, clt.cgi.stdinFd, clt.cgi.stdoutFd);
 				}
 				if (_fdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
 					_fdToClient[fd]->writeClient(fd);
