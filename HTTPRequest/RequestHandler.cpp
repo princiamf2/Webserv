@@ -29,6 +29,13 @@ static bool isMethodAllowed(std::string const& method, Location const* location)
 		return true;
 	if (location->allowed_methods_http.empty())
 		return true;
+	if (method == "HEAD")
+	{
+		return (location->allowed_methods_http.find("HEAD")
+				!= location->allowed_methods_http.end()
+			|| location->allowed_methods_http.find("GET")
+				!= location->allowed_methods_http.end());
+	}
 	return (location->allowed_methods_http.find(method)
 		!= location->allowed_methods_http.end());
 }

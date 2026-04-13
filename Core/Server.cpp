@@ -170,6 +170,8 @@ void Server::readClient(int fd, Core *core)
 		HttpRequest request = HttpParser::parseRequest(_clients[fd].readBuf);
 		Location const* location = findBestLocation(_conf, request.path);
 		ActionRequest action = RequestHandler::resolveAction(request, _conf, location);
+		std::cout << "REQUEST PATH = " << request.path << std::endl;
+		std::cout << "ACTION SCRIPT PATH = " << action.scriptPath << std::endl;
 
 		if (action.type == ACTION_START_CGI)
 		{

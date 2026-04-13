@@ -90,9 +90,14 @@ void Core::runPoll()
 				if (_cgiReadFdToClient.count(fd))
 				{
 					int clientFd = _cgiReadFdToClient[fd];
-					_fdToClient[clientFd]->finalizeCgi(clientFd);
-					_cgiReadFdToClient.erase(fd);
-					_pollFds.erase(_pollFds.begin() + i);
+					if (!CgiManager::readOutput(_fdToClient[clientFd]->getClients()[clientFd].cgi))
+					{
+						_fdToClient[clientFd]->finalizeCgi(clientFd);
+						_cgiReadFdToClient.erase(fd);
+						_pollFds.erase(_pollFds.begin() + i);
+						size--;
+						i--;
+					}
 				}
 				else if (_cgiWriteFdToClient.count(fd))
 				{
