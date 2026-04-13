@@ -6,7 +6,7 @@
 /*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/04/11 15:42:41 by michel           ###   ########.fr       */
+/*   Updated: 2026/04/13 03:02:59 by michel           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -129,8 +129,7 @@ std::string CgiManager::getDirectoryPath(const std::string& path)
 
 char** CgiManager::buildCgiEnv(const HttpRequest& request,
 	const ServerConfig& server,
-	const Location* location,
-	const std::string& scriptPath)
+	const Location* location)
 {
 	std::vector<std::string> envStrings;
 	char** env;
@@ -150,7 +149,7 @@ char** CgiManager::buildCgiEnv(const HttpRequest& request,
 	envStrings.push_back("REQUEST_METHOD=" + request.method);
 	envStrings.push_back("QUERY_STRING=" + request.query);
 	envStrings.push_back("SCRIPT_NAME=" + scriptName);
-	envStrings.push_back("SCRIPT_FILENAME=" + scriptPath);
+	envStrings.push_back("SCRIPT_FILENAME=" + scriptName);
 	envStrings.push_back("PATH_INFO=" + scriptName);
 	envStrings.push_back("REQUEST_URI=" + request.uri);
 	envStrings.push_back("CONTENT_LENGTH=" + contentLength);
@@ -159,7 +158,19 @@ char** CgiManager::buildCgiEnv(const HttpRequest& request,
 	envStrings.push_back("SERVER_PROTOCOL=" + request.version);
 	envStrings.push_back("REDIRECT_STATUS=200");
 	envStrings.push_back("SERVER_NAME=webserv");
-	envStrings.push_back("SERVER_PORT=8080");
+	it = request.headers.find("host");
+	if (it != request.headers.end())
+	{
+		std::string hostValue = it->second;
+		size_t colonPos = hostValue.rfind(':');
+
+		if (colonPos != std::string::npos)
+			envStrings.push_back("SERVER_PORT=" + hostValue.substr(colonPos + 1));
+		else
+			envStrings.push_back("SERVER_PORT=80");
+	}
+	else
+		envStrings.push_back("SERVER_PORT=80");
 
 	it = request.headers.find("content-type");
 	if (it != request.headers.end())
@@ -330,7 +341,6 @@ bool CgiManager::startProcess(CgiProcess& process,
 	char* argv[3];
 	std::string scriptDir;
 	std::string scriptName;
-	std::string absPath;
 
 	if (pipe(inputPipe) == -1)
 		return false;
@@ -368,7 +378,7 @@ bool CgiManager::startProcess(CgiProcess& process,
 		if (chdir(scriptDir.c_str()) == -1)
 			std::exit(1);
 
-		envp = buildCgiEnv(request, server, location, scriptPath);
+		envp = buildCgiEnv(request, server, location);
 
 		argv[0] = const_cast<char*>(interpreter.c_str());
 		argv[1] = const_cast<char*>(scriptName.c_str());
@@ -480,17 +490,12 @@ bool CgiManager::checkChild(CgiProcess& process)
 	return true;
 }
 
-	#include <iostream>
 CgiResult CgiManager::buildFinalResult(CgiProcess& process)
 {
 	CgiResult result;
 
 	result.rawOutput = process.outputBuffer;
 
-	if (!process.childExited)
-		return result;
-	if (!WIFEXITED(process.exitStatus) || WEXITSTATUS(process.exitStatus) != 0)
-		return result;
 	if (result.rawOutput.empty())
 		return result;
 
