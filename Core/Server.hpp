@@ -92,3 +92,9 @@ class Server
 //============(UTILS)====================//
 //error
 int error(std::string s);
+
+//readline
+int readCommand(Core* C);
+
+//welcome
+void welcome();

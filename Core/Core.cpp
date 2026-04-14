@@ -6,9 +6,9 @@ Core::Core(std::vector<ServerConfig> configs)
 	_servers.reserve(configs.size());
 	for (size_t i = 0; i < configs.size(); i++)
 	{
-		Server s(configs[i]);
-		s.init();
-		_servers.push_back(s);
+		_servers.emplace_back(configs[i]);
+		if (_servers[i].init() != SUCCESS)
+			throw std::runtime_error("Server init failed");
 		addFdsToCore(i);
 	}
 }
@@ -47,8 +47,18 @@ void Core::registerCgi(int clientFd, int stdinFd, int stdoutFd)
 
 void Core::runPoll()
 {
-	while (true) //we'll need to handle signals
+	fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
+	struct pollfd stdinPfd;
+	stdinPfd.fd = STDIN_FILENO;
+	stdinPfd.events = POLLIN;
+	stdinPfd.revents = 0;
+	bool quit = 0;
+	
+	_pollFds.insert(_pollFds.begin(), stdinPfd);
+	while (true)
 	{
+		if (quit == true)
+			break;
 		time_t now = time(NULL);
 		std::vector<int> toClose;
 		for (std::map<int, Server*>::iterator it = _fdToClient.begin(); it != _fdToClient.end(); ++it)
@@ -64,8 +74,6 @@ void Core::runPoll()
 		for (size_t i = 0; i < toClose.size(); i++)
 			closeClient(toClose[i]);
 
-
-
 		int ret = poll(_pollFds.data(), _pollFds.size(), 1);
 
 		if (ret == -1)
@@ -80,6 +88,11 @@ void Core::runPoll()
 		size_t size = _pollFds.size();
 		for (size_t i = 0; i < size; i++)
 		{
+			if (i == 0 && (_pollFds[i].revents & POLLIN))
+			{
+				quit = readCommand(this);
+				continue;
+			}
 			if (_pollFds[i].revents == 0)
 				continue; // empty fd
 
@@ -106,7 +119,8 @@ void Core::runPoll()
 				}
 				else
 					closeClient(fd);
-				size--; i--;
+				size--;
+				i--;
 				continue;
 			}
 			if (_fdToServer.count(fd) && (_pollFds[i].revents & POLLIN)) // new connection
@@ -139,7 +153,9 @@ void Core::runPoll()
 				closeClient(fd);
 				size--;
 				i--;
+				continue;
 			}
+
 			// Pipe stdin CGI prêt en écriture
 			if (_cgiWriteFdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
 			{
@@ -177,6 +193,17 @@ void Core::runPoll()
 
 		}
 	}
+
+	for (size_t i = 0; i < _pollFds.size(); i++)
+		close(_pollFds[i].fd);
+	_pollFds.clear();
+	_fdToClient.clear();
+	_fdToServer.clear();
+}
+
+std::vector<Server>& Core::getServers()
+{
+	return (_servers);
 }
 
 void Core::acceptClient(int listenFd)
