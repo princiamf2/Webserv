@@ -19,6 +19,7 @@
 
 //====================(DEFINES)=============================//
 # define SUCCESS 1
+# define QUIT 1
 # define FAIL 0
 # define TIMEOUT 60
 # define BODYTO 10
@@ -48,5 +49,6 @@ class Core
 		void acceptClient(int listenFd);         // add a client to fds list
 		void closeClient(int fd);           // close and remove client
 		void debug();
+		std::vector<Server>& getServers();
 };
 

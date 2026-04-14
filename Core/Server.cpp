@@ -220,10 +220,6 @@ bool Server::clientHasData(int fd)
 
 Server::~Server()
 {
-//	for (size_t i = 0; i < _listenFds.size(); i++)
-//		close(_listenFds[i]); // close listen socket
-//	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
-//		close(it->first); // close clients
 }
 
 std::vector<int>& Server::getListenFds(void)
