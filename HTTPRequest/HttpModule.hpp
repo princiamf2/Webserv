@@ -7,5 +7,6 @@
 
 std::string handleRawHttpRequest(std::string const& rawRequest,
                                  ServerConfig const& server);
+Location const* findBestLocation(ServerConfig const& server, std::string const& path);
 
 #endif

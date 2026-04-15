@@ -1,13 +1,14 @@
 #include "Core.hpp"
+#include <sys/poll.h>
 
 Core::Core(std::vector<ServerConfig> configs)
 {
 	_servers.reserve(configs.size());
 	for (size_t i = 0; i < configs.size(); i++)
 	{
-		Server s(configs[i]);
-		s.init();
-		_servers.push_back(s);
+		_servers.emplace_back(configs[i]);
+		if (_servers[i].init() != SUCCESS)
+			throw std::runtime_error("Server init failed");
 		addFdsToCore(i);
 	}
 }
@@ -28,17 +29,43 @@ void Core::addFdsToCore(size_t serverIndex)
 	}
 }
 
+void Core::registerCgi(int clientFd, int stdinFd, int stdoutFd)
+{
+	if (stdinFd != -1)
+	{
+		struct pollfd pfd = {stdinFd, POLLOUT, 0};
+		_pollFds.push_back(pfd);
+		_cgiWriteFdToClient[stdinFd] = clientFd;
+	}
+	if (stdoutFd != -1)
+	{
+		struct pollfd pfd = {stdoutFd, POLLIN, 0};
+		_pollFds.push_back(pfd);
+		_cgiReadFdToClient[stdoutFd] = clientFd;
+	}
+}
+
 void Core::runPoll()
 {
-	while (true) //we'll need to handle signals
+	fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
+	struct pollfd stdinPfd;
+	stdinPfd.fd = STDIN_FILENO;
+	stdinPfd.events = POLLIN;
+	stdinPfd.revents = 0;
+	bool quit = 0;
+	
+	_pollFds.insert(_pollFds.begin(), stdinPfd);
+	while (true)
 	{
+		if (quit == true)
+			break;
 		time_t now = time(NULL);
 		std::vector<int> toClose;
 		for (std::map<int, Server*>::iterator it = _fdToClient.begin(); it != _fdToClient.end(); ++it)
 		{
 			int clientFd = it->first;
 			Server* srv = it->second;
-		
+
 			int timeout = srv->clientWaitingBody(clientFd) ? BODYTO : TIMEOUT;
 			if (srv->clientTimedOut(clientFd, now, timeout))
 				toClose.push_back(clientFd);
@@ -46,8 +73,6 @@ void Core::runPoll()
 
 		for (size_t i = 0; i < toClose.size(); i++)
 			closeClient(toClose[i]);
-
-
 
 		int ret = poll(_pollFds.data(), _pollFds.size(), 1);
 
@@ -63,14 +88,37 @@ void Core::runPoll()
 		size_t size = _pollFds.size();
 		for (size_t i = 0; i < size; i++)
 		{
+			if (i == 0 && (_pollFds[i].revents & POLLIN))
+			{
+				quit = readCommand(this);
+				continue;
+			}
 			if (_pollFds[i].revents == 0)
 				continue; // empty fd
 
 			int fd = _pollFds[i].fd;
 
-			if (_pollFds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
+			if (_pollFds[i].revents & (POLLERR |  POLLNVAL))
 			{
-				closeClient(fd);
+				if (_cgiReadFdToClient.count(fd))
+				{
+					int clientFd = _cgiReadFdToClient[fd];
+					if (!CgiManager::readOutput(_fdToClient[clientFd]->getClients()[clientFd].cgi))
+					{
+						_fdToClient[clientFd]->finalizeCgi(clientFd);
+						_cgiReadFdToClient.erase(fd);
+						_pollFds.erase(_pollFds.begin() + i);
+						size--;
+						i--;
+					}
+				}
+				else if (_cgiWriteFdToClient.count(fd))
+				{
+					_cgiWriteFdToClient.erase(fd);
+					_pollFds.erase(_pollFds.begin() + i);
+				}
+				else
+					closeClient(fd);
 				size--;
 				i--;
 				continue;
@@ -80,25 +128,82 @@ void Core::runPoll()
 				acceptClient(fd);
 				continue;
 			}
+
 			if (_fdToClient.count(fd)) // a client is actif
 			{
 				if (_pollFds[i].revents & POLLIN)
-					_fdToClient[fd]->readClient(fd);
-				if (_pollFds[i].revents & POLLOUT)
+				{
+					_fdToClient[fd]->readClient(fd, this);
+					// Client &clt = _fdToClient[fd]->getClients()[fd];
+					// if (clt.cgiActive)
+					// 	registerCgi(clt.fd, clt.cgi.stdinFd, clt.cgi.stdoutFd);
+				}
+				if (_fdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
 					_fdToClient[fd]->writeClient(fd);
 			}
-			if (_fdToClient[fd]->clientHasData(fd))
-				_pollFds[i].events |= POLLOUT;
+			if (_fdToClient.count(fd))
+			{
+				_pollFds[i].events = POLLIN;
+				if (_fdToClient[fd]->clientHasData(fd))
+					_pollFds[i].events |= POLLOUT;
+			}
 
-			if (_fdToClient[fd]->clientToClose(fd))
+			if (_fdToClient.count(fd) && _fdToClient[fd]->clientToClose(fd))
 			{
 				closeClient(fd);
+				size--;
+				i--;
+				continue;
+			}
+
+			// CGI stdin ready to write
+			if (_cgiWriteFdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
+			{
+				int clientFd = _cgiWriteFdToClient[fd];
+
+				CgiManager::writeInput(_fdToClient[clientFd]->getClients()[clientFd].cgi);
+
+				// if stdin closed -> remove from _pollFds
+				if (_fdToClient[clientFd]->getClients()[clientFd].cgi.stdinClosed)
+				{
+					_cgiWriteFdToClient.erase(fd);
+					_pollFds.erase(_pollFds.begin() + i);
+					size--;
+					i--;
+				}
+			}
+
+			// CGI stdout ready to read
+			if (_cgiReadFdToClient.count(fd) && (_pollFds[i].revents & POLLIN))
+			{
+				int clientFd = _cgiReadFdToClient[fd];
+				CgiManager::readOutput(_fdToClient[clientFd]->getClients()[clientFd].cgi);
+			}
+
+			// CGI stdout closed -> CGI did end
+			if (_cgiReadFdToClient.count(fd) && (_pollFds[i].revents & POLLHUP))
+			{
+				int clientFd = _cgiReadFdToClient[fd];
+				_fdToClient[clientFd]->finalizeCgi(clientFd);
+				_cgiReadFdToClient.erase(fd);
+				_pollFds.erase(_pollFds.begin() + i);
 				size--;
 				i--;
 			}
 
 		}
 	}
+
+	for (size_t i = 0; i < _pollFds.size(); i++)
+		close(_pollFds[i].fd);
+	_pollFds.clear();
+	_fdToClient.clear();
+	_fdToServer.clear();
+}
+
+std::vector<Server>& Core::getServers()
+{
+	return (_servers);
 }
 
 void Core::acceptClient(int listenFd)

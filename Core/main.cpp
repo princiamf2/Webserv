@@ -1,5 +1,11 @@
 #include "webserv.hpp"
+#include <signal.h>
 
+void	sa(int sig)
+{
+	(void)sig;
+	std::cout << std::endl << "To quit, just type 'q' and enter" << std::endl;
+}
 
 int main(int ac, char **av)
 {
@@ -8,10 +14,15 @@ int main(int ac, char **av)
 		std::cerr << "Usage: " << av[0] << " <config>" << std::endl;
 		return (1);
 	}
+	signal(SIGINT, sa);
+	signal(SIGQUIT, sa);
+	signal(SIGPIPE, SIG_IGN);
 
 	std::vector<ServerConfig> configs = parseConfig(av[1]);
+	if (configs.empty())
+		return (1);
 	Core C(configs);
-	C.debug();
+	welcome();
 	C.runPoll();
 
 	return (0);

@@ -3,12 +3,14 @@
 
 #include "HttpRequest.hpp"
 #include "HttpResponse.hpp"
+#include "RequestAction.hpp"
 #include "../Parsing/ServerConfig.hpp"
 
 class RequestHandler
 {
     public:
         static HttpResponse handleRequest(HttpRequest const&, ServerConfig const&, Location const*);
+        static ActionRequest resolveAction(HttpRequest const&, ServerConfig const&, Location const*);
 };
 
 #endif /* REQUESTHANDLER_HPP */

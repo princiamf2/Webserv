@@ -1,18 +1,20 @@
 #include "./Server.hpp"
+#include "Core.hpp"
 
 Server::Server(ServerConfig serv)
 {
-	_conf = serv;
-	_host = "127.0.0.1";
-	_ports = serv.listen_ports; //ports d'ecoute
-	_domainNames = serv.domain_names; //noms de domaine
-	_root = serv.root; //chemin dossier racine
-	_index = serv.index; //fichier index par defaut
-	_errorPages = serv.error_pages; //code d'erreur + chemin (page 404 par exemple)
-	_clientMaxBodySize = serv.client_max_body_size; //taille max du corps de la requete
-	_locations = serv.locations; //liste des locations pour ce serveur
-	// _listenFds; // un fd par port apres socket()+bind()+listen(), remplis par init
-	_autoindex = false;
+	_conf = serv;                                    // parsing configuration keeped
+	_host = "127.0.0.1";                             // host
+	_ports = serv.listen_ports;                      // listen ports
+	_domainNames = serv.domain_names;                // domain name
+	_root = serv.root;                               // root directory path
+	_index = serv.index;                             // index file by default
+	_errorPages = serv.error_pages;                  // error code -> path (404 page for example)
+	_clientMaxBodySize = serv.client_max_body_size;  // max size of request body
+	_locations = serv.locations;                     // locations list for this serveur
+	// _listenFds;                                   // one fd by port after socket()+bind()+listen(), filled by init
+	// _clients;                                     // clients fds -> client they correspond, filled as we go along by Core::acceptClient
+	_autoindex = false;                              // autoindex ?
 }
 
 Server::Server(const Server& other)
@@ -76,6 +78,20 @@ int Server::init(void)
 	return (SUCCESS);
 }
 
+void Server::finalizeCgi(int clientFd)
+{
+	CgiManager::checkChild(_clients[clientFd].cgi);
+	CgiResult result = CgiManager::buildFinalResult(_clients[clientFd].cgi);
+	CgiManager::cleanupProcess(_clients[clientFd].cgi);
+	_clients[clientFd].cgiActive = false;
+	std::cout << result.rawOutput << std::endl;
+	if (!result.success)
+		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(
+			buildErrorResponse(_conf, 500, "cgi failed"));
+	else
+		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(result.response);
+}
+
 bool Server::clientWaitingBody(int fd)
 {
 	return (_clients[fd].waitingBody);
@@ -86,6 +102,7 @@ void Server::addClient(int fd)
 	c.fd = fd;
 	c.toClose = false;
 	c.waitingBody = false;
+	c.cgiActive = false;
 	c.lastActivity = time(NULL);
 	_clients[fd] = c;
 }
@@ -100,14 +117,29 @@ bool Server::clientTimedOut(int fd, time_t now, int timeout)
 	return (now - _clients[fd].lastActivity > timeout);
 }
 
-void Server::readClient(int fd)
+bool Server::startCgiForClient (int fd, ActionRequest const& action)
+{
+	Client& client = _clients[fd];
+	if (!CgiManager::startProcess(client.cgi, action.request, _conf, action.location, action.scriptPath, action.interpreter))
+		return false;
+	client.cgiActive = true;
+	return true;
+}
+
+void Server::readClient(int fd, Core *core)
 {
 	char	buf[4096];
 	ssize_t bytes = recv(fd, buf, sizeof(buf), 0);
 
-	if (bytes <= 0) // 0 = déconnexion, -1 = erreur
+	if (bytes <= 0) // 0 = deconnexion, -1 = error
 	{
-		_clients[fd].toClose = true; // TODO to handle
+		if (_clients[fd].waitingBody)
+		{
+			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 400, "incomplete request body"));
+			_clients[fd].waitingBody = false;
+		}
+		else
+			_clients[fd].toClose = true;
 		return ;
 	}
 	_clients[fd].lastActivity = time(NULL);
@@ -134,20 +166,35 @@ void Server::readClient(int fd)
 			return ; // incomplete body
 		}
 	}
-	else
-		std::cout << "lenght not found, sending request" << std::endl;
+	_clients[fd].waitingBody = false;
+	try
+	{
+		HttpRequest request = HttpParser::parseRequest(_clients[fd].readBuf);
+		Location const* location = findBestLocation(_conf, request.path);
+		ActionRequest action = RequestHandler::resolveAction(request, _conf, location);
+		std::cout << "REQUEST PATH = " << request.path << std::endl;
+		std::cout << "ACTION SCRIPT PATH = " << action.scriptPath << std::endl;
 
-	std::string response = handleRawHttpRequest(_clients[fd].readBuf, _conf);
-	_clients[fd].writeBuf = response;
+		if (action.type == ACTION_START_CGI)
+		{
+			if (!startCgiForClient(fd, action))
+				_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+					buildErrorResponse(_conf, 500, action.scriptPath));
+			else
+				core->registerCgi(_clients[fd].fd, _clients[fd].cgi.stdinFd, _clients[fd].cgi.stdoutFd);
+		}
+		else
+			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(action.response);
+	}
+	catch (std::exception const& e)
+	{
+		(void)e;
+		_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+			buildErrorResponse(_conf, 400, "bad request"));
+	}
 	_clients[fd].readBuf.clear();
+	return ;
 
-	// VVV hard code for test VVV
-	// std::string response =
-	//		"HTTP/1.1 200 OK\r\n"
-	//		"Content-Length: 13\r\n"
-	//		"Content-Type: text/plain\r\n"
-	//		"\r\n"
-	//		"Hello World!\n";
 }
 
 void Server::writeClient(int fd)
@@ -163,20 +210,18 @@ void Server::writeClient(int fd)
 		return ;
 	}
 	_clients[fd].writeBuf.erase(0, bytes); // remove only added bytes
+	if (_clients[fd].writeBuf.empty())
+		_clients[fd].toClose = true;
 	_clients[fd].lastActivity = time(NULL);
 }
 
 bool Server::clientHasData(int fd)
 {
-	return (!_clients[fd].writeBuf.empty());
+	return (!_clients[fd].writeBuf.empty() || _clients[fd].cgiActive);
 }
 
 Server::~Server()
 {
-//	for (size_t i = 0; i < _listenFds.size(); i++)
-//		close(_listenFds[i]); // close listen socket
-//	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
-//		close(it->first); // close clients
 }
 
 std::vector<int>& Server::getListenFds(void)
@@ -196,6 +241,7 @@ bool Server::clientToClose(int fd)
 
 void Server::debug()
 {
+	int n = 0;
 	std::cout << "  host			 : " << _host << std::endl;
 	std::cout << "  root			 : " << _root << std::endl;
 	std::cout << "  index			: " << _index << std::endl;
@@ -221,7 +267,20 @@ void Server::debug()
 	for (std::map<int, std::string>::iterator it = _errorPages.begin(); it != _errorPages.end(); ++it)
 		std::cout << "	" << it->first << " -> " << it->second << std::endl;
 
-	std::cout << "  locations		: " << _locations.size() << " location(s)" << std::endl;
+	std::cout << "  locations        : " << _locations.size() << " location(s)" << std::endl;
+	
+	for (std::vector<Location>::iterator it = _locations.begin(); it != _locations.end(); ++it)
+	{
+		n++;
+	    std::cout << "	" << n << std::endl;
+	    std::cout << "		path: -> " << it->path << std::endl;
+	
+	    // show authoriwed methods
+	    std::cout << "		methods: " << std::endl;
+	    for (std::set<std::string>::iterator it2 = it->allowed_methods_http.begin();
+	         it2 != it->allowed_methods_http.end(); ++it2)
+	        std::cout << "			- " << *it2 << std::endl;
+	}
 
 	std::cout << "  clients		  : " << _clients.size() << " client(s)" << std::endl;
 	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
