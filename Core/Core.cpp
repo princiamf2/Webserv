@@ -156,14 +156,14 @@ void Core::runPoll()
 				continue;
 			}
 
-			// Pipe stdin CGI prêt en écriture
+			// CGI stdin ready to write
 			if (_cgiWriteFdToClient.count(fd) && (_pollFds[i].revents & POLLOUT))
 			{
 				int clientFd = _cgiWriteFdToClient[fd];
 
 				CgiManager::writeInput(_fdToClient[clientFd]->getClients()[clientFd].cgi);
 
-				// Si stdin fermé -> retirer de _pollFds
+				// if stdin closed -> remove from _pollFds
 				if (_fdToClient[clientFd]->getClients()[clientFd].cgi.stdinClosed)
 				{
 					_cgiWriteFdToClient.erase(fd);
@@ -173,14 +173,14 @@ void Core::runPoll()
 				}
 			}
 
-			// Pipe stdout CGI prêt en lecture
+			// CGI stdout ready to read
 			if (_cgiReadFdToClient.count(fd) && (_pollFds[i].revents & POLLIN))
 			{
 				int clientFd = _cgiReadFdToClient[fd];
 				CgiManager::readOutput(_fdToClient[clientFd]->getClients()[clientFd].cgi);
 			}
 
-			// Pipe stdout CGI fermé -> CGI terminé
+			// CGI stdout closed -> CGI did end
 			if (_cgiReadFdToClient.count(fd) && (_pollFds[i].revents & POLLHUP))
 			{
 				int clientFd = _cgiReadFdToClient[fd];

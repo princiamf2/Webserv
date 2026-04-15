@@ -1,18 +1,20 @@
 #include "./Server.hpp"
+#include "Core.hpp"
 
 Server::Server(ServerConfig serv)
 {
-	_conf = serv;
-	_host = "127.0.0.1";
-	_ports = serv.listen_ports; //ports d'ecoute
-	_domainNames = serv.domain_names; //noms de domaine
-	_root = serv.root; //chemin dossier racine
-	_index = serv.index; //fichier index par defaut
-	_errorPages = serv.error_pages; //code d'erreur + chemin (page 404 par exemple)
-	_clientMaxBodySize = serv.client_max_body_size; //taille max du corps de la requete
-	_locations = serv.locations; //liste des locations pour ce serveur
-	// _listenFds; // un fd par port apres socket()+bind()+listen(), remplis par init
-	_autoindex = false;
+	_conf = serv;                                    // parsing configuration keeped
+	_host = "127.0.0.1";                             // host
+	_ports = serv.listen_ports;                      // listen ports
+	_domainNames = serv.domain_names;                // domain name
+	_root = serv.root;                               // root directory path
+	_index = serv.index;                             // index file by default
+	_errorPages = serv.error_pages;                  // error code -> path (404 page for example)
+	_clientMaxBodySize = serv.client_max_body_size;  // max size of request body
+	_locations = serv.locations;                     // locations list for this serveur
+	// _listenFds;                                   // one fd by port after socket()+bind()+listen(), filled by init
+	// _clients;                                     // clients fds -> client they correspond, filled as we go along by Core::acceptClient
+	_autoindex = false;                              // autoindex ?
 }
 
 Server::Server(const Server& other)
@@ -123,13 +125,13 @@ bool Server::startCgiForClient (int fd, ActionRequest const& action)
 	client.cgiActive = true;
 	return true;
 }
-#include "Core.hpp"
+
 void Server::readClient(int fd, Core *core)
 {
 	char	buf[4096];
 	ssize_t bytes = recv(fd, buf, sizeof(buf), 0);
 
-	if (bytes <= 0) // 0 = déconnexion, -1 = erreur
+	if (bytes <= 0) // 0 = deconnexion, -1 = error
 	{
 		if (_clients[fd].waitingBody)
 		{
@@ -273,7 +275,7 @@ void Server::debug()
 	    std::cout << "	" << n << std::endl;
 	    std::cout << "		path: -> " << it->path << std::endl;
 	
-	    // afficher les méthodes autorisées
+	    // show authoriwed methods
 	    std::cout << "		methods: " << std::endl;
 	    for (std::set<std::string>::iterator it2 = it->allowed_methods_http.begin();
 	         it2 != it->allowed_methods_http.end(); ++it2)
