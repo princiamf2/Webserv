@@ -40,15 +40,18 @@ class Core
 		std::map<int, int>          _cgiWriteFdToClient; // CGI stdin pipe -> fd client
 
 	public:
-		Core(std::vector<ServerConfig> configs);
-		~Core();
-		void addFdsToCore(size_t serverIndex);
-		void registerCgi(int clientFd, int stdinFd, int stdoutFd);
-		int  init(void);                         // init of the binds listen etc
-		void runPoll();                          // run main loop with poll
-		void acceptClient(int listenFd);         // add a client to fds list
-		void closeClient(int fd);           // close and remove client
-		void debug();
-		std::vector<Server>& getServers();
+		Core(std::vector<ServerConfig> configs);                     // constuctor with a config needed
+		~Core();                                                     // destructor
+
+		int  init(void);                                             // init of the binds listen etc
+		void runPoll();                                              // run main loop with poll
+
+		void addFdsToCore(size_t serverIndex);                       // register a fd to Core
+		void registerCgi(int clientFd, int stdinFd, int stdoutFd);   // register a cgi to Core
+		void acceptClient(int listenFd);                             // add a client to fds list
+		void closeClient(int fd);                                    // close and remove client
+
+		void debug();                                                // show core and servers infos
+		std::vector<Server>& getServers();                           // getter for servers vector
 };
 
