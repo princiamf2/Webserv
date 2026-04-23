@@ -14,6 +14,9 @@ class HttpResponse
         std::string body;
 
         HttpResponse();
+        HttpResponse(HttpResponse const&);
+        HttpResponse& operator=(HttpResponse const&);
+        ~HttpResponse();
 };
 
 #endif /* HTTPRESPONSE_HPP */

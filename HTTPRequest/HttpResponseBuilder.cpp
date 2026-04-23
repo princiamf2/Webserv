@@ -4,6 +4,12 @@
 #include <map>
 #include <string>
 
+// canonic
+HttpResponseBuilder::HttpResponseBuilder() {}
+HttpResponseBuilder::HttpResponseBuilder(HttpResponseBuilder const& other) {(void)other;}
+HttpResponseBuilder& HttpResponseBuilder::operator=(HttpResponseBuilder const& other) {(void)other; return *this;}
+HttpResponseBuilder::~HttpResponseBuilder() {}
+
 std::string HttpResponseBuilder::buildResponse(HttpResponse const& response)
 {
     std::ostringstream out;

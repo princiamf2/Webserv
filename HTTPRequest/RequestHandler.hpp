@@ -11,6 +11,11 @@ class RequestHandler
     public:
         static HttpResponse handleRequest(HttpRequest const&, ServerConfig const&, Location const*);
         static ActionRequest resolveAction(HttpRequest const&, ServerConfig const&, Location const*);
+    private:
+        RequestHandler();
+        RequestHandler(RequestHandler const&);
+        RequestHandler& operator=(RequestHandler const&);
+        ~RequestHandler();
 };
 
 #endif /* REQUESTHANDLER_HPP */

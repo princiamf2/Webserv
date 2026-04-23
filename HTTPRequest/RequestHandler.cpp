@@ -9,6 +9,12 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+//canonic
+RequestHandler::RequestHandler() {}
+RequestHandler::RequestHandler(RequestHandler const& other) {(void)other;}
+RequestHandler& RequestHandler::operator=(RequestHandler const& other) {(void)other; return *this;}
+RequestHandler::~RequestHandler() {}
+
 //petit check de la taile du body
 static bool isBodySizeValid(HttpRequest const& request, ServerConfig const& server)
 {
