@@ -24,6 +24,12 @@
 #include <cstddef>
 #include <fcntl.h>
 
+// canonic
+CgiManager::CgiManager() {}
+CgiManager::CgiManager(CgiManager const& other) {(void)other;}
+CgiManager& CgiManager::operator=(CgiManager const& other) {(void)other; return *this;}
+CgiManager::~CgiManager() {}
+
 // helper local : phrase HTTP selon code
 static std::string getReasonPhrase(int code)
 {

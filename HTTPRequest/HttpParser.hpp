@@ -9,6 +9,11 @@ class HttpParser
 {
     public:
         static HttpRequest parseRequest(std::string const&);
+
+		HttpParser();
+		HttpParser(HttpParser const&);
+		HttpParser& operator=(HttpParser const&);
+		~HttpParser();
 };
 
 #endif /* HTTPPARSER_HPP */
