@@ -11,6 +11,7 @@
 #include <poll.h>
 #include <cstring>
 #include <unistd.h>
+#include <cstdlib>
 
 #include "colors.hpp"
 #include "../Parsing/Location.hpp"
@@ -35,9 +36,13 @@ class Core
 		std::vector<struct pollfd>  _pollFds;            // all fds lisned to
 		std::vector<Server>         _servers;            // all servers
 		std::map<int, Server*>      _fdToServer;         // fd lisned -> server they correspond
-		std::map<int, Server*>      _fdToClient;         // client fd -> server they correspond
+		std::map<int, Server*>      _fdClientToServer;   // client fd -> server they correspond
 		std::map<int, int>          _cgiReadFdToClient;  // CGI stdout pipe -> fd client
 		std::map<int, int>          _cgiWriteFdToClient; // CGI stdin pipe -> fd client
+
+		Core(const Core& other);                                  // base copy constructor not needed but for the Orthodox Canonical form
+		void operator=(const Core& other);                       // base copy assignation constructor not needed but for the Orthodox Canonical form
+	
 
 	public:
 		Core(std::vector<ServerConfig> configs);                     // constuctor with a config needed
