@@ -88,8 +88,9 @@ The core server logic is implemented in C++98 standard, with a web-based interfa
 **Modular Architecture** — Core networking logic is separated from HTTP request/response handling, making the codebase maintainable and testable.
 
 ## Screenshots
-<img src="https://github.com/Loufok0/Webserv/blob/main/ressources/Welcome.png" width="200"> <img src="https://github.com/Loufok0/Webserv/blob/main/ressources/Help.png" width="200"> <img src="https://github.com/Loufok0/Webserv/blob/main/ressources/log.png" width="200">
-<img src="https://github.com/Loufok0/Webserv/blob/main/ressources/Webserv_home.png" width="200"> <img src="https://github.com/Loufok0/Webserv/blob/main/ressources/Webserv_cgi.png" width="200"> <img src="https://github.com/Loufok0/Webserv/blob/main/ressources/Webserv_logs.png" width="200">
+<img src="https://github.com/Loufok0/Webserv/blob/main/ressources/Welcome.png" width="400">
+<img src="https://github.com/Loufok0/Webserv/blob/main/ressources/Webserv_home.png" width="400">
+
 
 ## Resources
 
