@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <ctime>
 
 //canonic
 RequestHandler::RequestHandler() {}
@@ -342,6 +343,15 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 	{
 		std::string fileContent;
 		std::string filePath;
+		std::time_t now = std::time(NULL);
+		std::tm *t = std::localtime(&now);
+
+		std::stringstream ss;
+		ss << "session_id="
+		<< t->tm_hour << ":"
+		<< t->tm_min << ":"
+		<< t->tm_sec
+		<< "; Path=/";
 
 		if (!buildFilePath(root, request.path, location, server, filePath))
 			return buildErrorResponse(server, 403, request.path);
@@ -356,6 +366,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 				response.statusCode = 200;
 				response.reasonPhrase = getReasonPhrase(200);
 				response.headers["Content-Type"] = getContentType(indexPath);
+				response.headers["Set-Cookie"] = ss.str();
 				response.body = fileContent;
 				applyHeadLogic(response, request);
 				return response;
@@ -366,6 +377,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 				response.statusCode = 200;
 				response.reasonPhrase = getReasonPhrase(200);
 				response.headers["Content-Type"] = "text/html";
+				response.headers["Set-Cookie"] = ss.str();
 				response.body = fileContent;
 				applyHeadLogic(response, request);
 				return response;
@@ -380,6 +392,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		response.statusCode = 200;
 		response.reasonPhrase = getReasonPhrase(200);
 		response.headers["Content-Type"] = getContentType(filePath);
+		response.headers["Set-Cookie"] = ss.str();
 		response.body = fileContent;
 		applyHeadLogic(response, request);
 		return response;
