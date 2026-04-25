@@ -6,7 +6,7 @@
 /*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/04/25 14:01:24 by michel           ###   ########.fr       */
+/*   Updated: 2026/04/25 18:23:40 by michel           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -23,6 +23,7 @@
 #include <map>
 #include <cstddef>
 #include <fcntl.h>
+#include <cerrno>
 
 // canonic
 CgiManager::CgiManager() {}
