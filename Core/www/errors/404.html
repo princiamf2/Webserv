@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .container {
+            max-width: 600px;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+            animation: slideUp 0.8s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .error-code {
+            font-size: 120px;
+            font-weight: 900;
+            background: linear-gradient(45deg, #ff6b6b, #ff8e72);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            animation: float 3s ease-in-out infinite;
+            text-shadow: 0 10px 30px rgba(255, 107, 107, 0.3);
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .error-title {
+            font-size: 3em;
+            color: white;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        .error-message {
+            font-size: 1.3em;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .error-description {
+            font-size: 1em;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #ff6b6b;
+            text-align: left;
+        }
+
+        .icon-404 {
+            width: 150px;
+            height: 150px;
+            margin: 0 auto 30px;
+            position: relative;
+        }
+
+        .icon-404::before {
+            content: '🔍';
+            font-size: 120px;
+            display: block;
+            animation: search 2s ease-in-out infinite;
+        }
+
+        @keyframes search {
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(-15deg) scale(1.1); }
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 40px;
+        }
+
+        .btn {
+            padding: 14px 32px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.05em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-3px);
+        }
+
+        .status-info {
+            margin-top: 40px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9em;
+        }
+
+        .status-info strong {
+            color: white;
+        }
+
+        @media (max-width: 600px) {
+            .error-code {
+                font-size: 80px;
+            }
+
+            .error-title {
+                font-size: 2em;
+            }
+
+            .error-message {
+                font-size: 1.1em;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="stars" id="starsContainer"></div>
+
+    <div class="container">
+        <div class="icon-404"></div>
+        
+        <div class="error-code">404</div>
+        
+        <h1 class="error-title">Page Not Found</h1>
+        
+        <p class="error-message">
+            Oops! The page you're looking for seems to have disappeared into the void.
+        </p>
+
+        <div class="error-description">
+            <strong>What happened?</strong><br>
+            The resource you requested could not be found on this server. This might be because:
+            <ul style="text-align: left; margin-top: 10px; margin-left: 20px;">
+                <li>The URL might be incorrect or outdated</li>
+                <li>The page may have been moved or deleted</li>
+                <li>You may not have permission to access this resource</li>
+            </ul>
+        </div>
+
+        <div class="button-group">
+            <a href="/" class="btn btn-primary">🏠 Go Home</a>
+            <button class="btn btn-secondary" onclick="history.back()">⬅ Go Back</button>
+        </div>
+
+        <div class="status-info">
+            <strong>Error Code:</strong> 404 Not Found | 
+            <strong>Timestamp:</strong> <span id="timestamp"></span> |
+            <strong>Server:</strong> Webserv
+        </div>
+    </div>
+
+    <script>
+        // Generate random stars
+        function generateStars() {
+            const container = document.getElementById('starsContainer');
+            for (let i = 0; i < 50; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.width = Math.random() * 3 + 'px';
+                star.style.height = star.style.width;
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 3 + 's';
+                container.appendChild(star);
+            }
+        }
+
+        // Set timestamp
+        document.getElementById('timestamp').textContent = new Date().toLocaleString();
+
+        generateStars();
+    </script>
+</body>
+</html>

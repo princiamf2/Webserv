@@ -1,0 +1,91 @@
+/* Shared error page styles */
+
+:root {
+    --error-404: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --error-403: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    --error-500: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+}
+
+.error-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    text-align: center;
+}
+
+.error-animation {
+    animation: fadeInUp 0.8s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.error-icon {
+    font-size: 120px;
+    margin: 20px 0;
+    animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+}
+
+.error-content h1 {
+    font-size: 2.5em;
+    font-weight: 700;
+    margin: 20px 0;
+}
+
+.error-content p {
+    font-size: 1.1em;
+    line-height: 1.6;
+    margin: 20px 0;
+    opacity: 0.9;
+}
+
+.error-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 30px;
+    flex-wrap: wrap;
+}
+
+.error-action-btn {
+    padding: 12px 28px;
+    border: none;
+    border-radius: 6px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+}
+
+@media (max-width: 600px) {
+    .error-icon {
+        font-size: 80px;
+    }
+
+    .error-content h1 {
+        font-size: 1.8em;
+    }
+
+    .error-actions {
+        flex-direction: column;
+    }
+
+    .error-action-btn {
+        width: 100%;
+    }
+}
