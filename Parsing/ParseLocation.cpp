@@ -523,6 +523,8 @@ bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, S
 	{
 		if (location.cgi_interpreters.find(*iter) == location.cgi_interpreters.end())
 		{
+            if (*iter == ".cgi")
+                continue;
 			std::cerr << "ERROR: NO CGI_INTERPRETER FOR EXTENSION " << *iter << std::endl;
 			return false;
 		}

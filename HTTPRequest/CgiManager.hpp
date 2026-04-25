@@ -29,6 +29,10 @@ class CgiManager
 		static void cleanupProcess(CgiProcess& process);
 
 	private:
+		CgiManager();
+		CgiManager(CgiManager const&);
+		CgiManager& operator=(CgiManager const&);
+		~CgiManager();
 		static std::string getScriptName(const std::string& scriptPath);
 		static std::string getDirectoryPath(const std::string& path);
 		static char** buildCgiEnv(const HttpRequest& request, const ServerConfig& server, const Location* location);

@@ -9,6 +9,12 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+//canonic
+RequestHandler::RequestHandler() {}
+RequestHandler::RequestHandler(RequestHandler const& other) {(void)other;}
+RequestHandler& RequestHandler::operator=(RequestHandler const& other) {(void)other; return *this;}
+RequestHandler::~RequestHandler() {}
+
 //petit check de la taile du body
 static bool isBodySizeValid(HttpRequest const& request, ServerConfig const& server)
 {
@@ -465,12 +471,7 @@ ActionRequest RequestHandler::resolveAction(HttpRequest const& request,
 		}
 		extension = getFileExtension(filePath);
 		action.interpreter = CgiManager::getCgiInterpreter(extension, location);
-		if (action.interpreter.empty())
-		{
-			action.type = ACTION_IMMEDIATE_RESPONSE;
-			action.response = buildErrorResponse(server, 500, filePath);
-			return action;
-		}
+		
 		action.type = ACTION_START_CGI;
 		action.request = request;
 		action.location = location;
