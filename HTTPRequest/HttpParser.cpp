@@ -6,7 +6,13 @@
 #include <cstdio>
 #include <cctype>
 
-// petit outil pour retirer espace au debut et a la fin 
+// canonic
+HttpParser::HttpParser() {}
+HttpParser::HttpParser(HttpParser const& other) {(void)other;}
+HttpParser& HttpParser::operator=(HttpParser const& other) {(void)other; return *this;}
+HttpParser::~HttpParser() {}
+
+// petit outil pour retirer espace au debut et a la fin
 static std::string trim(const std::string& str)
 {
     size_t start = 0;
@@ -56,7 +62,7 @@ static size_t HttpParserContentLength(std::string const& value)
 
 HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
 {
-    HttpRequest request;//une requete 
+    HttpRequest request;//une requete
     size_t headerEnd = rawRequest.find("\r\n\r\n");//je prends la position du separateur entre header et body
 
     if (headerEnd == std::string::npos)//si il existe pas je renvoi une exception une requete dois toujours avoir ce separateur
@@ -73,7 +79,7 @@ HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
     if (!line.empty() && line[line.size() - 1] == '\r')//je regarde si la ligne que j'ai lu a '\r' a la fin ou il est pas vide
         line.erase(line.size() - 1);//si il a '\r' je l'enleve
 
-    std::istringstream requestLine(line);//je transforme la ligne en flux 
+    std::istringstream requestLine(line);//je transforme la ligne en flux
     if (!(requestLine >> request.method >> request.uri >> request.version))
         throw std::runtime_error("Invalid HTTP request line");
     requestLine >> std::ws;

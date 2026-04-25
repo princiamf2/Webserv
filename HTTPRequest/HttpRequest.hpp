@@ -15,6 +15,11 @@ class HttpRequest
         std::string version;
         std::map<std::string, std::string> headers;
         std::string body;
+        
+        HttpRequest();
+        HttpRequest(HttpRequest const&);
+        HttpRequest& operator=(HttpRequest const&);
+        ~HttpRequest();
 };
 
 #endif /* HTTPREQUEST_HPP */

@@ -6,7 +6,7 @@
 /*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/04/13 03:02:59 by michel           ###   ########.fr       */
+/*   Updated: 2026/04/25 18:23:40 by michel           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -23,6 +23,13 @@
 #include <map>
 #include <cstddef>
 #include <fcntl.h>
+#include <cerrno>
+
+// canonic
+CgiManager::CgiManager() {}
+CgiManager::CgiManager(CgiManager const& other) {(void)other;}
+CgiManager& CgiManager::operator=(CgiManager const& other) {(void)other; return *this;}
+CgiManager::~CgiManager() {}
 
 // helper local : phrase HTTP selon code
 static std::string getReasonPhrase(int code)
@@ -380,9 +387,18 @@ bool CgiManager::startProcess(CgiProcess& process,
 
 		envp = buildCgiEnv(request, server, location);
 
-		argv[0] = const_cast<char*>(interpreter.c_str());
-		argv[1] = const_cast<char*>(scriptName.c_str());
-		argv[2] = NULL;
+		if (!interpreter.empty())
+		{
+			argv[0] = const_cast<char*>(interpreter.c_str());
+			argv[1] = const_cast<char*>(scriptName.c_str());
+			argv[2] = NULL;
+		}
+		else
+		{
+			argv[0] = const_cast<char*>(scriptName.c_str());
+			argv[1] = NULL;
+			argv[2] = NULL;
+		}
 
 		execve(argv[0], argv, envp);
 		freeCgiEnv(envp);
