@@ -281,7 +281,19 @@ void Server::debug()
 	    std::cout << "		methods: " << std::endl;
 	    for (std::set<std::string>::iterator it2 = it->allowed_methods_http.begin();
 	         it2 != it->allowed_methods_http.end(); ++it2)
-	        std::cout << "			- " << *it2 << std::endl;
+	    std::cout << "			- " << *it2 << std::endl;
+
+		std::cout << "\t\tcgi_extensions: ";
+		for (std::set<std::string>::iterator it3 = it->cgi_extensions.begin();
+			it3 != it->cgi_extensions.end(); ++it3)
+			std::cout << *it3 << " ";
+		std::cout << std::endl;
+
+		std::cout << "\t\tcgi_interpreters: ";
+		for (std::map<std::string, std::string>::iterator it4 = it->cgi_interpreters.begin();
+			it4 != it->cgi_interpreters.end(); ++it4)
+			std::cout << "(" << it4->first << " -> " << it4->second << ") ";
+		std::cout << std::endl;
 	}
 
 	std::cout << "  clients		  : " << _clients.size() << " client(s)" << std::endl;

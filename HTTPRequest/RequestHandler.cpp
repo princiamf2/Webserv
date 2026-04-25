@@ -471,12 +471,7 @@ ActionRequest RequestHandler::resolveAction(HttpRequest const& request,
 		}
 		extension = getFileExtension(filePath);
 		action.interpreter = CgiManager::getCgiInterpreter(extension, location);
-		if (action.interpreter.empty())
-		{
-			action.type = ACTION_IMMEDIATE_RESPONSE;
-			action.response = buildErrorResponse(server, 500, filePath);
-			return action;
-		}
+		
 		action.type = ACTION_START_CGI;
 		action.request = request;
 		action.location = location;
