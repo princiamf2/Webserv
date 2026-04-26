@@ -1,4 +1,5 @@
 #include "HttpParser.hpp"
+#include "HttpRequest.hpp"
 #include <cstddef>
 #include <sstream>
 #include <stdexcept>
@@ -60,6 +61,98 @@ static size_t HttpParserContentLength(std::string const& value)
     return length;
 }
 
+static std::string getBoundary(std::string const& contentType)
+{
+    size_t pos = contentType.find("boundary=");
+    std::string boundary;
+
+    if (pos == std::string::npos)
+        return "";
+    boundary = contentType.substr(pos + 9);
+    if (!boundary.empty() && boundary[0] == '"')
+    {
+        size_t end = boundary.find('"', 1);
+        if (end != std::string::npos)
+            boundary = boundary.substr(1, end - 1);
+    }
+    return boundary;
+}
+
+static std::string getHeaderValue(std::string const& headers, std::string const& key)
+{
+    size_t pos;
+    size_t start;
+    size_t end;
+
+    pos = headers.find(key);
+    if (pos == std::string::npos)
+        return "";
+    start = pos + key.size();
+    end = headers.find("\r\n", start);
+    if (end == std::string::npos)
+        end = headers.size();
+    return trim(headers.substr(start, end - start));
+}
+
+static std::string getMultipartFilename(std::string const& headers)
+{
+    size_t pos;
+    size_t start;
+    size_t end;
+
+    pos = headers.find("filename=\"");
+    if (pos == std::string::npos)
+        return "";
+    start = pos + 10;
+    end = headers.find("\"", start);
+    if (end == std::string::npos)
+        return "";
+    return headers.substr(start, end - start);
+}
+
+static void parseMultipartBody(HttpRequest& request)
+{
+    std::map<std::string, std::string>::const_iterator it;
+    std::string contentType;
+    std::string boundary;
+    std::string marker;
+    size_t pos;
+    size_t headerEnd;
+    size_t bodyStart;
+    size_t bodyEnd;
+    std::string partHeaders;
+
+    request.isMultipart = false;
+    it = request.headers.find("content-type");
+    if (it == request.headers.end())
+        return;
+    contentType = it->second;
+    if (contentType.find("multipart/form-data") == std::string::npos)
+        return;
+    boundary = getBoundary(contentType);
+    if (boundary.empty())
+        return;
+    marker = "--" + boundary;
+    pos = request.body.find(marker);
+    if (pos == std::string::npos)
+        return;
+    pos += marker.size();
+    if (request.body.compare(pos, 2, "\r\n") == 0)
+        pos += 2;
+    headerEnd = request.body.find("\r\n\r\n", pos);
+    if (headerEnd == std::string::npos)
+        return;
+    partHeaders = request.body.substr(pos, headerEnd - pos);
+    bodyStart = headerEnd + 4;
+    bodyEnd = request.body.find("\r\n" + marker, bodyStart);
+    if (bodyEnd == std::string::npos)
+        return;
+    request.uploadFilename = getMultipartFilename(partHeaders);
+    request.uploadContentType = getHeaderValue(partHeaders, "Content-Type:");
+    request.uploadContent = request.body.substr(bodyStart, bodyEnd - bodyStart);
+    request.isMultipart = true;
+}
+
 HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
 {
     HttpRequest request;//une requete
@@ -115,5 +208,6 @@ HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
         if (request.body.size() != expected)
             throw std::runtime_error("Invalid HTTP request: body size does not match Content-Length");
     }
+    parseMultipartBody(request);
     return request;
 }
