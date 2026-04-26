@@ -66,8 +66,8 @@ static bool writeFileContent(std::string const& filePath, std::string const& con
 
 	if (!file.is_open())
 		return false;
-	file << content;
-	return true;
+	file.write(content.data(), content.size());
+	return file.good();
 }
 //outil delete
 static bool deleteFile(std::string const& filePath)
@@ -232,13 +232,38 @@ static std::string extensionFromContentType(HttpRequest const& request)
     if (it->second.find("image/png") != std::string::npos)
         return ".png";
     if (it->second.find("image/jpeg") != std::string::npos)
-        return ".jpg";
+        return ".jpeg";
     if (it->second.find("image/gif") != std::string::npos)
         return ".gif";
     if (it->second.find("text/plain") != std::string::npos)
         return ".txt";
 
     return ".bin";
+}
+static std::string extensionFromFileName(std::string const& filename)
+{
+	size_t pos = filename.find_last_of('.');
+
+	if (pos == std::string::npos)
+		return ".bin";
+	return filename.substr(pos);
+}
+static std::string buildUniqueUploadPathWithExt(ServerConfig const& server, Location const* location, std::string const& ext)
+{
+	std::string base = resolveUploadBase(server, location);
+	std::string candidate;
+	int i = 0;
+
+	while (true)
+	{
+		if (!base.empty() && base[base.size() - 1] == '/')
+			candidate = base + "upload_" + intToString(i) + ext;
+		else
+			candidate = base + "/upload_" + intToString(i) + ext;
+		if (!pathExists(candidate))
+			return candidate;
+		++i;
+	}
 }
 static std::string buildUniqueUploadPath(ServerConfig const& server,
 	Location const* location, HttpRequest const& request)
@@ -422,12 +447,22 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 	if (request.method == "POST")
 	{
 		std::string filePath;
+		std::string uploadBody;
 
 		if (!buildFilePath(root, request.path, location, server, filePath))
 			return buildErrorResponse(server, 403, request.path);
 
-		filePath = buildUniqueUploadPath(server, location, request);
-		if (!writeFileContent(filePath, request.body))
+		if (request.isMultipart)
+		{
+			uploadBody = request.uploadContent;
+			filePath = buildUniqueUploadPathWithExt(server, location, extensionFromFileName(request.uploadFilename));
+		}
+		else
+		{
+			uploadBody = request.body;
+			filePath = buildUniqueUploadPath(server, location, request);
+		}
+		if (!writeFileContent(filePath, uploadBody))
 			return buildErrorResponse(server, 500, filePath);
 
 		std::string fileName = extractFileName(filePath);

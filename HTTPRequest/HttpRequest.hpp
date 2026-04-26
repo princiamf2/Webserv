@@ -15,6 +15,11 @@ class HttpRequest
         std::string version;
         std::map<std::string, std::string> headers;
         std::string body;
+
+        bool    isMultipart;
+        std::string uploadFilename;
+        std::string uploadContentType;
+        std::string uploadContent;
         
         HttpRequest();
         HttpRequest(HttpRequest const&);
