@@ -1,5 +1,6 @@
 #include "RequestHandler.hpp"
 #include "CgiManager.hpp"
+#include "HttpRequest.hpp"
 #include "RequestAction.hpp"
 #include "RequestUtils.hpp"
 #include <sstream>
@@ -220,19 +221,39 @@ static std::string intToString(int n)
 	oss << n;
 	return oss.str();
 }
+static std::string extensionFromContentType(HttpRequest const& request)
+{
+    std::map<std::string, std::string>::const_iterator it =
+        request.headers.find("content-type");
+
+    if (it == request.headers.end())
+        return ".bin";
+
+    if (it->second.find("image/png") != std::string::npos)
+        return ".png";
+    if (it->second.find("image/jpeg") != std::string::npos)
+        return ".jpg";
+    if (it->second.find("image/gif") != std::string::npos)
+        return ".gif";
+    if (it->second.find("text/plain") != std::string::npos)
+        return ".txt";
+
+    return ".bin";
+}
 static std::string buildUniqueUploadPath(ServerConfig const& server,
-	Location const* location)
+	Location const* location, HttpRequest const& request)
 {
 	std::string base = resolveUploadBase(server, location);
+	std::string ext = extensionFromContentType(request);
 	std::string candidate;
 	int i = 0;
 
 	while (true)
 	{
 		if (!base.empty() && base[base.size() - 1] == '/')
-			candidate = base + "upload_" + intToString(i) + ".txt";
+			candidate = base + "upload_" + intToString(i) + ext;
 		else
-			candidate = base + "/upload_" + intToString(i) + ".txt";
+			candidate = base + "/upload_" + intToString(i) + ext;
 		if (!pathExists(candidate))
 			return candidate;
 		++i;
@@ -405,7 +426,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		if (!buildFilePath(root, request.path, location, server, filePath))
 			return buildErrorResponse(server, 403, request.path);
 
-		filePath = buildUniqueUploadPath(server, location);
+		filePath = buildUniqueUploadPath(server, location, request);
 		if (!writeFileContent(filePath, request.body))
 			return buildErrorResponse(server, 500, filePath);
 
