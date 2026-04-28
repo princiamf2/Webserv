@@ -95,10 +95,17 @@ The core server logic is implemented in C++98 standard, with a web-based interfa
 ## Resources
 
 ### Documentation
-- [Core](https://github.com/Loufok0/Webserv/tree/main/Core)
-    - [poll](https://man7.org/linux/man-pages/man2/poll.2.html)
-    - [bind](https://cplusplus.com/reference/functional/bind/)
-    - [fcntl](https://man7.org/linux/man-pages/man2/fcntl.2.html)
+- [Beej's Guide to Network Programming](https://beej.us/guide/bgnet/html/)
+- [poll](https://man7.org/linux/man-pages/man2/poll.2.html)
+- [bind](https://cplusplus.com/reference/functional/bind/)
+- [fcntl](https://man7.org/linux/man-pages/man2/fcntl.2.html)
+- [HTTP guides](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides)
+- Hypertext Transfer Protocol (HTTP/1.1)
+  - [Message Syntax and Routing](https://datatracker.ietf.org/doc/html/rfc7230)
+  - [ Semantics and Content](https://datatracker.ietf.org/doc/html/rfc7231)
+- [HTTP Semantics](https://datatracker.ietf.org/doc/html/rfc9110)
+- [The Common Gateway Interface (CGI) Version 1.1](https://datatracker.ietf.org/doc/html/rfc3875)
+- [Parsing inspo](https://nginx.org/en/docs/beginners_guide.html)
 
 ### AI Usage
 AI (Claude by Anthropic) was used during this project for the following tasks:
