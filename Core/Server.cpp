@@ -158,7 +158,6 @@ void Server::readClient(int fd, Core *core)
 		size_t clEnd = _clients[fd].readBuf.find("\r\n", clPos);
 		std::string tmp = _clients[fd].readBuf.substr(clPos + 16, clEnd - clPos - 16);
 		contentLength = std::atoll(tmp.c_str());
-		std::cout << "lenght found, pos: " << clPos << ", lenght: " << contentLength << std::endl;
 		size_t bodySize = _clients[fd].readBuf.size() - (headerEnd + 4);
 		if (bodySize < contentLength)
 		{
