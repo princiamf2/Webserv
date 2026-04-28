@@ -116,6 +116,7 @@ class WebservManager {
 
                 const locationHeader = xhr.getResponseHeader('Location');
                 const responseText = xhr.responseText;
+                fileItem.uploadPath = locationHeader;
 
                 this.log('success', `File uploaded: ${file.name}`);
                 if (locationHeader) {
@@ -133,7 +134,7 @@ class WebservManager {
             this.log('error', `Network error uploading ${file.name}`);
         });
 
-        const uploadUrl = '/upload';
+        const uploadUrl = '/upload/';
         xhr.open('POST', uploadUrl, true);
         xhr.setRequestHeader('X-File-Upload', 'true');
 
@@ -211,17 +212,33 @@ class WebservManager {
     }
 
     deleteFile(filename, fileElement) {
-        fileElement.style.animation = 'slideIn 0.3s ease reverse';
-        setTimeout(() => {
-            fileElement.remove();
-            this.uploadedFiles = this.uploadedFiles.filter(f => f.file.name !== filename);
-            if (this.uploadedFiles.length === 0) {
-                document.getElementById('fileList').innerHTML = '<p class="empty-state">No files uploaded yet</p>';
-            }
-            this.updateStatistics();
-        }, 300);
+        const fileItem = this.uploadedFiles.find(item => item.element === fileElement);
 
-        fetch(`/delete/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+        if (!fileItem || !fileItem.uploadPath) {
+            this.log('error', 'No upload path found for delete');
+            return;
+        }
+
+        fetch(fileItem.uploadPath, { method: 'DELETE' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`DELETE failed: ${response.status}`);
+                }
+
+                fileElement.style.animation = 'slideIn 0.3s ease reverse';
+                setTimeout(() => {
+                    fileElement.remove();
+                    this.uploadedFiles = this.uploadedFiles.filter(item => item.element !== fileElement);
+
+                    if (this.uploadedFiles.length === 0) {
+                        document.getElementById('fileList').innerHTML = '<p class="empty-state">No files uploaded yet</p>';
+                    }
+
+                    this.updateStatistics();
+                }, 300);
+
+                this.log('success', `Deleted: ${fileItem.uploadPath}`);
+            })
             .catch(error => this.log('error', `Failed to delete file: ${error.message}`));
     }
 

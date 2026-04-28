@@ -234,7 +234,6 @@ void Core::acceptClient(int listenFd)
 
 	_fdClientToServer[clientFd] = _fdToServer[listenFd]; // associate client to server
 	_fdToServer[listenFd]->addClient(clientFd); // add client in server
-	std::cout << MAGENTA << "REQUEST MADE:" << RESET << std::endl;
 }
 
 void Core::closeClient(int fd)
@@ -254,7 +253,6 @@ void Core::closeClient(int fd)
 		}
 	}
 	close(fd);
-	std::cout << MAGENTA << "END OF REQUEST" << RESET << std::endl << std::endl;
 }
 
 Core::~Core() {};
