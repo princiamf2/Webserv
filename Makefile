@@ -39,6 +39,7 @@ RM = rm -f
 all: $(NAME)
 
 $(NAME): $(OBJS)
+	mkdir -p ./Core/www/upload
 	$(CXX) $(OBJS) $(CXXFLAGS) -o $(NAME)
 	@echo $(NAME)" compiled!\n"
 
