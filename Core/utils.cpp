@@ -37,6 +37,11 @@ int readCommand(Core* C)
     char line[4];
     ssize_t size = read(0, line, 3);
 
+	if (size < 0)
+		return (0);
+	if (size == 0)
+		return (QUIT);
+
     if (size != 2 && size != 3)
         return (0);
 
