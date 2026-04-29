@@ -158,7 +158,23 @@ void Server::readClient(int fd, Core *core)
 		size_t clEnd = _clients[fd].readBuf.find("\r\n", clPos);
 		std::string tmp = _clients[fd].readBuf.substr(clPos + 16, clEnd - clPos - 16);
 		contentLength = std::atoll(tmp.c_str());
+		if (_clientMaxBodySize > 0 && contentLength > _clientMaxBodySize)
+		{
+			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+				buildErrorResponse(_conf, 413, "payload too large"));
+			_clients[fd].waitingBody = false;
+			_clients[fd].readBuf.clear();
+			return ;
+		}
 		size_t bodySize = _clients[fd].readBuf.size() - (headerEnd + 4);
+		if (_clientMaxBodySize > 0 && bodySize > _clientMaxBodySize)
+		{
+			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+				buildErrorResponse(_conf, 413, "payload too large"));
+			_clients[fd].waitingBody = false;
+			_clients[fd].readBuf.clear();
+			return ;
+		}
 		if (bodySize < contentLength)
 		{
 			_clients[fd].waitingBody = true;
@@ -201,7 +217,12 @@ void Server::writeClient(int fd)
 
 	ssize_t bytes = send(fd, _clients[fd].writeBuf.c_str(),
 							 _clients[fd].writeBuf.size(), 0);
-	if (bytes == -1)
+	if (bytes < 0)
+	{
+		_clients[fd].toClose = true;
+		return ;
+	}
+	if (bytes == 0)
 	{
 		_clients[fd].toClose = true;
 		return ;

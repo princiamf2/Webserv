@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   CgiManager.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
+/*   By: marvin <marvin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/04/25 18:23:40 by michel           ###   ########.fr       */
+/*   Updated: 2026/04/29 14:35:06 by marvin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -442,10 +442,15 @@ bool CgiManager::writeInput(CgiProcess& process)
 
 	if (written < 0)
 	{
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
+		int savedErr = errno;
+		if (savedErr == EINTR)
+			return true;
+		if (savedErr == EAGAIN || savedErr == EWOULDBLOCK)
 			return true;
 		return false;
 	}
+	if (written == 0)
+		return false;
 
 	process.inputOffset += static_cast<size_t>(written);
 
@@ -469,7 +474,10 @@ bool CgiManager::readOutput(CgiProcess& process)
 	bytesRead = read(process.stdoutFd, buffer, sizeof(buffer));
 	if (bytesRead < 0)
 	{
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
+		int savedErr = errno;
+		if (savedErr == EINTR)
+			return true;
+		if (savedErr == EAGAIN || savedErr == EWOULDBLOCK)
 			return true;
 		return false;
 	}
