@@ -24,6 +24,7 @@
 # define FAIL 0
 # define TIMEOUT 60
 # define BODYTO 10
+# define CGI_TIMEOUT 5
 
 //====================(STRUCTS)=============================//
 

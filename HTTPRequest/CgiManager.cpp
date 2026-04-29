@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   CgiManager.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: marvin <marvin@student.42.fr>              +#+  +:+       +#+        */
+/*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/04/29 14:35:06 by marvin           ###   ########.fr       */
+/*   Updated: 2026/04/29 17:08:17 by michel           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -23,7 +23,6 @@
 #include <map>
 #include <cstddef>
 #include <fcntl.h>
-#include <cerrno>
 
 // canonic
 CgiManager::CgiManager() {}
@@ -419,7 +418,9 @@ bool CgiManager::startProcess(CgiProcess& process,
 	process.stdinClosed = false;
 	process.stdoutClosed = false;
 	process.childExited = false;
+	process.error = false;
 	process.exitStatus = 0;
+	process.startTime = time(NULL);
 	return true;
 }
 
@@ -442,15 +443,14 @@ bool CgiManager::writeInput(CgiProcess& process)
 
 	if (written < 0)
 	{
-		int savedErr = errno;
-		if (savedErr == EINTR)
-			return true;
-		if (savedErr == EAGAIN || savedErr == EWOULDBLOCK)
-			return true;
+		close(process.stdinFd);
+		process.stdinFd = -1;
+		process.stdinClosed = true;
+		process.error = true;
 		return false;
 	}
 	if (written == 0)
-		return false;
+		return true;
 
 	process.inputOffset += static_cast<size_t>(written);
 
@@ -474,17 +474,11 @@ bool CgiManager::readOutput(CgiProcess& process)
 	bytesRead = read(process.stdoutFd, buffer, sizeof(buffer));
 	if (bytesRead < 0)
 	{
-		int savedErr = errno;
-		if (savedErr == EINTR)
-			return true;
-		if (savedErr == EAGAIN || savedErr == EWOULDBLOCK)
-			return true;
+		close(process.stdoutFd);
+		process.stdoutFd = -1;
+		process.stdoutClosed = true;
+		process.error = true;
 		return false;
-	}
-	if (bytesRead > 0)
-	{
-		process.outputBuffer.append(buffer, bytesRead);
-		return true;
 	}
 	if (bytesRead == 0)
 	{
@@ -493,7 +487,9 @@ bool CgiManager::readOutput(CgiProcess& process)
 		process.stdoutClosed = true;
 		return true;
 	}
-	return false;
+
+	process.outputBuffer.append(buffer, bytesRead);
+	return true;
 }
 
 bool CgiManager::checkChild(CgiProcess& process)
@@ -519,6 +515,9 @@ CgiResult CgiManager::buildFinalResult(CgiProcess& process)
 	CgiResult result;
 
 	result.rawOutput = process.outputBuffer;
+	
+	if (process.error)
+		return result;
 
 	if (result.rawOutput.empty())
 		return result;
@@ -530,11 +529,12 @@ CgiResult CgiManager::buildFinalResult(CgiProcess& process)
 
 void CgiManager::cleanupProcess(CgiProcess& process)
 {
+	int status;
+	
 	if (process.stdinFd != -1)
 		close(process.stdinFd);
 	if (process.stdoutFd != -1)
 		close(process.stdoutFd);
-
 	process.stdinFd = -1;
 	process.stdoutFd = -1;
 	process.stdinClosed = true;
