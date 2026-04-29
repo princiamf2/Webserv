@@ -1,4 +1,6 @@
 #include "Core.hpp"
+#include "Server.hpp"
+#include <csignal>
 #include <sys/poll.h>
 
 Core::Core(std::vector<ServerConfig> configs)
@@ -82,6 +84,17 @@ void Core::runPoll()
 			int timeout = srv->clientWaitingBody(clientFd) ? BODYTO : TIMEOUT;
 			if (srv->clientTimedOut(clientFd, now, timeout))
 				toClose.push_back(clientFd);
+			Client& client = srv->getClients()[clientFd];
+			if (client.cgiActive)
+				CgiManager::checkChild(client.cgi);
+			if (client.cgiActive && client.cgi.startTime > 0
+				&& now - client.cgi.startTime > CGI_TIMEOUT)
+			{
+				client.cgi.error = true;
+				if (client.cgi.pid > 0 && !client.cgi.childExited)
+					kill(client.cgi.pid, SIGKILL);
+				srv->finalizeCgi(clientFd);
+			}
 		}
 
 		for (size_t i = 0; i < toClose.size(); i++)
@@ -174,7 +187,15 @@ void Core::runPoll()
 			{
 				int clientFd = _cgiWriteFdToClient[fd];
 
-				CgiManager::writeInput(_fdClientToServer[clientFd]->getClients()[clientFd].cgi);
+				if (!CgiManager::writeInput(_fdClientToServer[clientFd]->getClients()[clientFd].cgi))
+				{
+					_fdClientToServer[clientFd]->finalizeCgi(clientFd);
+					_cgiWriteFdToClient.erase(fd);
+					_pollFds.erase(_pollFds.begin() + i);
+					size--;
+					i--;
+					continue;
+				}
 
 				// if stdin closed -> remove from _pollFds
 				if (_fdClientToServer[clientFd]->getClients()[clientFd].cgi.stdinClosed)
@@ -190,7 +211,15 @@ void Core::runPoll()
 			if (_cgiReadFdToClient.count(fd) && (_pollFds[i].revents & POLLIN))
 			{
 				int clientFd = _cgiReadFdToClient[fd];
-				CgiManager::readOutput(_fdClientToServer[clientFd]->getClients()[clientFd].cgi);
+				if (!CgiManager::readOutput(_fdClientToServer[clientFd]->getClients()[clientFd].cgi))
+				{
+					_fdClientToServer[clientFd]->finalizeCgi(clientFd);
+					_cgiReadFdToClient.erase(fd);
+					_pollFds.erase(_pollFds.begin() + i);
+					size--;
+					i--;
+					continue;
+				}
 			}
 
 			// CGI stdout closed -> CGI did end
