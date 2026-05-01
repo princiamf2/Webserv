@@ -31,14 +31,17 @@ int main(int ac, char **av)
 	{
 		std::vector<ServerConfig> configs = parseConfig(conf);
 		if (configs.empty())
+		{
+			std::cerr << ERROR << "No server detected in the config file..." << std::endl;
 			return (1);
+		}
 		Core C(configs);
 		welcome();
 		C.runPoll();
 	}
 	catch (const std::exception &e)
 	{
-		std::cerr << "Error: " << e.what() << std::endl;
+		std::cerr << ERROR << e.what() << std::endl;
 		return (1);
 	}
 
