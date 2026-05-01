@@ -17,13 +17,20 @@ int main(int ac, char **av)
 	signal(SIGINT, sa);
 	signal(SIGQUIT, sa);
 	signal(SIGPIPE, SIG_IGN);
-
-	std::vector<ServerConfig> configs = parseConfig(av[1]);
-	if (configs.empty())
+	try
+	{
+		std::vector<ServerConfig> configs = parseConfig(av[1]);
+		if (configs.empty())
+			return (1);
+		Core C(configs);
+		welcome();
+		C.runPoll();
+	}
+	catch (const std::exception &e)
+	{
+		std::cerr << "Error: " << e.what() << std::endl;
 		return (1);
-	Core C(configs);
-	welcome();
-	C.runPoll();
+	}
 
 	return (0);
 }

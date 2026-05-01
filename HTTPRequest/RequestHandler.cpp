@@ -501,7 +501,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		response.statusCode = 204;
 		response.reasonPhrase = "No Content";
 		response.headers["Content-Type"] = "text/plain";
-		response.body = "";
+		response.body = "File deleted: " + filePath + "\n";
 		return response;
 	}
 	return buildErrorResponse(server, 500);
