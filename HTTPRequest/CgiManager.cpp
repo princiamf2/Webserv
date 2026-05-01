@@ -442,15 +442,9 @@ bool CgiManager::writeInput(CgiProcess& process)
 		process.inputBuffer.size() - process.inputOffset);
 
 	if (written < 0)
-	{
-		close(process.stdinFd);
-		process.stdinFd = -1;
-		process.stdinClosed = true;
-		process.error = true;
 		return false;
-	}
 	if (written == 0)
-		return true;
+		return false;
 
 	process.inputOffset += static_cast<size_t>(written);
 
@@ -473,13 +467,7 @@ bool CgiManager::readOutput(CgiProcess& process)
 
 	bytesRead = read(process.stdoutFd, buffer, sizeof(buffer));
 	if (bytesRead < 0)
-	{
-		close(process.stdoutFd);
-		process.stdoutFd = -1;
-		process.stdoutClosed = true;
-		process.error = true;
 		return false;
-	}
 	if (bytesRead == 0)
 	{
 		close(process.stdoutFd);
@@ -487,7 +475,6 @@ bool CgiManager::readOutput(CgiProcess& process)
 		process.stdoutClosed = true;
 		return true;
 	}
-
 	process.outputBuffer.append(buffer, bytesRead);
 	return true;
 }
