@@ -85,7 +85,6 @@ int main(int argc, char **argv)
 
 	std::vector< std::pair<std::string, std::string> > tests;
 
-	// ----------- GET simple file -----------
 	tests.push_back(std::make_pair(
 		"GET existing index file",
 		"GET /index.html HTTP/1.1\r\n"
@@ -107,7 +106,6 @@ int main(int argc, char **argv)
 		"\r\n"
 	));
 
-	// ----------- directory / index / autoindex -----------
 	tests.push_back(std::make_pair(
 		"GET directory with index",
 		"GET /docs HTTP/1.1\r\n"
@@ -122,7 +120,6 @@ int main(int argc, char **argv)
 		"\r\n"
 	));
 
-	// ----------- redirect -----------
 	tests.push_back(std::make_pair(
 		"GET redirect location",
 		"GET /old-page HTTP/1.1\r\n"
@@ -130,7 +127,6 @@ int main(int argc, char **argv)
 		"\r\n"
 	));
 
-	// ----------- POST upload -----------
 	tests.push_back(std::make_pair(
 		"POST upload normal",
 		"POST /upload HTTP/1.1\r\n"
@@ -151,7 +147,6 @@ int main(int argc, char **argv)
 		"1234567890123456789012345678901234567890"
 	));
 
-	// ----------- DELETE -----------
 	tests.push_back(std::make_pair(
 		"DELETE existing upload file",
 		"DELETE /upload/upload_0.txt HTTP/1.1\r\n"
@@ -166,7 +161,6 @@ int main(int argc, char **argv)
 		"\r\n"
 	));
 
-	// ----------- security -----------
 	tests.push_back(std::make_pair(
 		"GET traversal attempt -> forbidden",
 		"GET /images/../../secret.txt HTTP/1.1\r\n"
@@ -174,7 +168,6 @@ int main(int argc, char **argv)
 		"\r\n"
 	));
 
-	// ----------- parser errors -----------
 	tests.push_back(std::make_pair(
 		"Missing Host header -> parser error",
 		"GET /index.html HTTP/1.1\r\n"
@@ -206,7 +199,6 @@ int main(int argc, char **argv)
 		"\r\n"
 	));
 
-	// ----------- CGI GET -----------
 	tests.push_back(std::make_pair(
 		"GET CGI python with query",
 		"GET /cgi-bin/test.py?name=michel&x=42 HTTP/1.1\r\n"

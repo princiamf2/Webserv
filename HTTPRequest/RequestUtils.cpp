@@ -4,7 +4,6 @@
 #include <vector>
 #include <sys/stat.h>
 
-// ---------------- helpers internes seulement ici ----------------
 
 static bool locationMatchesUtil(std::string const& requestPath,
 	std::string const& locationPath)
@@ -152,8 +151,6 @@ static bool getErrorPagePathUtil(ServerConfig const& server, int code,
 		path = root + "/" + page;
 	return true;
 }
-
-// ---------------- fonctions exposées ----------------
 
 std::string resolveRoot(ServerConfig const& server, Location const* location)
 {
