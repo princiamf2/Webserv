@@ -137,10 +137,19 @@ static bool getErrorPagePathUtil(ServerConfig const& server, int code,
 	std::string& path)
 {
 	std::map<int, std::string>::const_iterator it(server.error_pages.find(code));
+	std::string root;
+	std::string page;
 
 	if (it == server.error_pages.end())
 		return false;
-	path = it->second;
+	root = server.root;
+	page = it->second;
+	if (!root.empty() && root[root.size() - 1] == '/')
+		root.erase(root.size() - 1);
+	if (!page.empty() && page[0] == '/')
+		path = root + page;
+	else
+		path = root + "/" + page;
 	return true;
 }
 
