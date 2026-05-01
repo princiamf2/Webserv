@@ -498,10 +498,10 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 			return buildErrorResponse(server, 404, filePath);
 		if (!deleteFile(filePath))
 			return buildErrorResponse(server, 403, filePath);
-		response.statusCode = 200;
-		response.reasonPhrase = "OK";
+		response.statusCode = 204;
+		response.reasonPhrase = "No Content";
 		response.headers["Content-Type"] = "text/plain";
-		response.body = "File deleted: " + filePath + "\n";
+		response.body = "";
 		return response;
 	}
 	return buildErrorResponse(server, 500);
