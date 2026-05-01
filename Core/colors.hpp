@@ -31,10 +31,5 @@
 
 
 # define ERROR       RED "Error: " RESET
-# ifndef D
-	#define D 0
-#endif
-
-# define BDEBUG      BLUE "Debug: " RESET
-# define EDEBUG      (D ? "\n" : "\r\33[2K")
+# define WARNING     YELLOW "Warning: " RESET
 
