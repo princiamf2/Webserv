@@ -114,6 +114,8 @@ static std::string getContentTypeUtil(std::string const& filePath)
 		return "image/png";
 	if (extension == ".gif")
 		return "image/gif";
+	if (extension == ".ico")
+		return "image/x-icon";
 	if (extension == ".txt")
 		return "text/plain";
 	return "application/octet-stream";
