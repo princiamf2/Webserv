@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   CgiManager.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
+/*   By: marvin <marvin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/04/29 17:08:17 by michel           ###   ########.fr       */
+/*   Updated: 2026/05/01 10:03:10 by marvin           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -516,8 +516,6 @@ CgiResult CgiManager::buildFinalResult(CgiProcess& process)
 
 void CgiManager::cleanupProcess(CgiProcess& process)
 {
-	int status;
-	
 	if (process.stdinFd != -1)
 		close(process.stdinFd);
 	if (process.stdoutFd != -1)
