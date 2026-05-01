@@ -9,17 +9,27 @@ void	sa(int sig)
 
 int main(int ac, char **av)
 {
-	if (ac != 2)
+	if (ac > 2)
 	{
-		std::cerr << "Usage: " << av[0] << " <config>" << std::endl;
+		std::cerr << ERROR << "Usage: " << av[0] << " [config]" << std::endl;
 		return (1);
 	}
+
+	std::string conf;
+	if (ac == 1)
+	{
+		std::cout << WARNING << " no config file given, using the default one of Core (./Core/Core.config)" << std::endl;
+		conf = "./Core/Core.config";
+	}
+	else
+		conf = av[1];
+
 	signal(SIGINT, sa);
 	signal(SIGQUIT, sa);
 	signal(SIGPIPE, SIG_IGN);
 	try
 	{
-		std::vector<ServerConfig> configs = parseConfig(av[1]);
+		std::vector<ServerConfig> configs = parseConfig(conf);
 		if (configs.empty())
 			return (1);
 		Core C(configs);
