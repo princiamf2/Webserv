@@ -66,7 +66,7 @@ int Server::init(void)
 		memset(&addr, 0, sizeof(addr));
 		addr.sin_family = AF_INET;
 		addr.sin_port = htons(*it);
-		addr.sin_addr.s_addr = inet_addr(_host.c_str());
+		addr.sin_addr.s_addr = INADDR_ANY;
 
 		if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
 			return (error("Bind returned -1"));
@@ -286,13 +286,13 @@ void Server::debug()
 		std::cout << "	" << it->first << " -> " << it->second << std::endl;
 
 	std::cout << "  locations        : " << _locations.size() << " location(s)" << std::endl;
-	
+
 	for (std::vector<Location>::iterator it = _locations.begin(); it != _locations.end(); ++it)
 	{
 		n++;
 	    std::cout << "	" << n << std::endl;
 	    std::cout << "		path: -> " << it->path << std::endl;
-	
+
 	    // show authoriwed methods
 	    std::cout << "		methods: " << std::endl;
 	    for (std::set<std::string>::iterator it2 = it->allowed_methods_http.begin();
