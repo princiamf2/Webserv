@@ -43,7 +43,7 @@ class Core
 
 		Core(const Core& other);                                  // base copy constructor not needed but for the Orthodox Canonical form
 		void operator=(const Core& other);                       // base copy assignation constructor not needed but for the Orthodox Canonical form
-	
+
 
 	public:
 		Core(std::vector<ServerConfig> configs);                     // constuctor with a config needed
@@ -56,7 +56,8 @@ class Core
 		void registerCgi(int clientFd, int stdinFd, int stdoutFd);   // register a cgi to Core
 		void acceptClient(int listenFd);                             // add a client to fds list
 		void closeClient(int fd);                                    // close and remove client
-
+		void removePollFd(int fd);
+		
 		void debug();                                                // show core and servers infos
 		std::vector<Server>& getServers();                           // getter for servers vector
 };

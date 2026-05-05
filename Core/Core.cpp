@@ -68,7 +68,7 @@ void Core::runPoll()
 	stdinPfd.events = POLLIN;
 	stdinPfd.revents = 0;
 	bool quit = 0;
-	
+
 	_pollFds.insert(_pollFds.begin(), stdinPfd);
 	while (true)
 	{
@@ -265,22 +265,49 @@ void Core::acceptClient(int listenFd)
 	_fdToServer[listenFd]->addClient(clientFd); // add client in server
 }
 
-void Core::closeClient(int fd)
+void Core::removePollFd(int fd)
 {
-	if (_fdClientToServer.count(fd))
-	{
-		_fdClientToServer[fd]->removeClient(fd);
-		_fdClientToServer.erase(fd);
-	}
-
-	for (size_t i = 0; i < _pollFds.size(); i++)
+	for (size_t i = 0; i < _pollFds.size(); ++i)
 	{
 		if (_pollFds[i].fd == fd)
 		{
 			_pollFds.erase(_pollFds.begin() + i);
-			break ;
+			return ;
 		}
 	}
+}
+
+void Core::closeClient(int fd)
+{
+	if (_fdClientToServer.count(fd))
+	{
+		Server *srv = _fdClientToServer[fd];
+		Client &client = srv->getClients()[fd];
+
+		if (client.cgiActive)
+		{
+			if (client.cgi.pid > 0 && !client.cgi.childExited)
+				kill(client.cgi.pid, SIGKILL);
+
+			if (client.cgi.stdinFd != -1)
+			{
+				_cgiWriteFdToClient.erase(client.cgi.stdinFd);
+				removePollFd(client.cgi.stdinFd);
+			}
+			if (client.cgi.stdoutFd != -1)
+			{
+				_cgiReadFdToClient.erase(client.cgi.stdoutFd);
+				removePollFd(client.cgi.stdoutFd);
+			}
+			CgiManager::cleanupProcess(client.cgi);
+			client.cgiActive = false;
+		}
+
+		srv->removeClient(fd);
+		_fdClientToServer.erase(fd);
+	}
+
+	removePollFd(fd);
 	close(fd);
 }
 
