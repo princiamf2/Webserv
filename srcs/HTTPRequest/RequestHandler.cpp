@@ -402,7 +402,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		<< "; Path=/";
 
 		if (!buildFilePath(root, request.path, location, server, filePath))
-			return buildErrorResponse(server, 403, request.path);
+			return buildErrorResponse(server, 400, request.path);
 
 		if (isDirectory(filePath))
 		{
@@ -452,7 +452,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		std::string uploadBody;
 
 		if (!buildFilePath(root, request.path, location, server, filePath))
-			return buildErrorResponse(server, 403, request.path);
+			return buildErrorResponse(server, 400, request.path);
 
 		if (request.isMultipart)
 		{
@@ -495,7 +495,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		std::string filePath;
 
 		if (!buildFilePath(root, request.path, location, server, filePath))
-			return buildErrorResponse(server, 403, request.path);
+			return buildErrorResponse(server, 400, request.path);
 		if (!pathExists(filePath))
 			return buildErrorResponse(server, 404, filePath);
 		if (!deleteFile(filePath))
