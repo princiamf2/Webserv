@@ -305,7 +305,8 @@ static void applyHeadLogic(HttpResponse& response, const HttpRequest& request)
 	response.headers["Content-Length"] = oss.str();
 	response.body.clear();
 }
-//petit outil pour mettre dans le header de la reponse les method autoriser quand l'utilisateur rentre une method pas allow
+
+
 static std::string buildAllowHeader(Location const* location)
 {
 	std::string allow;
@@ -408,8 +409,9 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		{
 			std::string indexPath = joinPath(filePath,
 				resolveIndex(server, location));
+			bool indexExists = pathExists(indexPath);
 
-			if (readFileContent(indexPath, fileContent))
+			if (indexExists && readFileContent(indexPath, fileContent))
 			{
 				response.statusCode = 200;
 				response.reasonPhrase = getReasonPhrase(200);
@@ -430,7 +432,9 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 				applyHeadLogic(response, request);
 				return response;
 			}
-			return buildErrorResponse(server, 403, filePath, true);
+			if (!indexExists)
+				return buildErrorResponse(server, 404, indexPath);
+			return buildErrorResponse(server, 403, indexPath);
 		}
 		if (!pathExists(filePath))
 			return buildErrorResponse(server, 404, filePath);

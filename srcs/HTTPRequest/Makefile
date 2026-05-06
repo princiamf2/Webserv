@@ -6,7 +6,10 @@ INCLUDES = -I. -I../Parsing
 HTTP_SRC = HttpParser.cpp \
            HttpResponse.cpp \
            HttpResponseBuilder.cpp \
+		   HttpRequest.cpp \
+		   RequestUtils.cpp \
            RequestHandler.cpp \
+		   CgiManager.cpp \
            main_test.cpp
 
 PARSING_SRC = ../Parsing/ParseConfig.cpp \
@@ -18,7 +21,10 @@ OBJ_DIR = obj
 OBJ = $(OBJ_DIR)/HttpParser.o \
       $(OBJ_DIR)/HttpResponse.o \
       $(OBJ_DIR)/HttpResponseBuilder.o \
+	$(OBJ_DIR)/HttpRequest.o \
+	$(OBJ_DIR)/RequestUtils.o \
       $(OBJ_DIR)/RequestHandler.o \
+	$(OBJ_DIR)/CgiManager.o \
       $(OBJ_DIR)/main_test.o \
       $(OBJ_DIR)/ParseConfig.o \
       $(OBJ_DIR)/ParseServer.o \
@@ -40,7 +46,16 @@ $(OBJ_DIR)/HttpResponse.o: HttpResponse.cpp | $(OBJ_DIR)
 $(OBJ_DIR)/HttpResponseBuilder.o: HttpResponseBuilder.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
 
+$(OBJ_DIR)/HttpRequest.o: HttpRequest.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
+
+$(OBJ_DIR)/RequestUtils.o: RequestUtils.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
+
 $(OBJ_DIR)/RequestHandler.o: RequestHandler.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
+
+$(OBJ_DIR)/CgiManager.o: CgiManager.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -MMD -MP -c $< -o $@
 
 $(OBJ_DIR)/main_test.o: main_test.cpp | $(OBJ_DIR)
