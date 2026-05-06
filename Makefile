@@ -3,7 +3,7 @@ NAME = webserv
 CXX = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98
 
-C = ./Core/
+C = ./srcs/Core/
 SRCSCORE =  $CCore.cpp\
 			$CServer.cpp\
 			$Cmain.cpp\
@@ -12,14 +12,14 @@ SRCSCORE =  $CCore.cpp\
 OBJSCORE = $(SRCSCORE:.cpp=.o)
 
 
-P = ./Parsing/
+P = ./srcs/Parsing/
 SRCSPARSING = $(P)ParseConfig.cpp \
               $(P)ParseServer.cpp \
               $(P)ParseLocation.cpp
 OBJSPARSING = $(SRCSPARSING:.cpp=.o)
 
 
-H = ./HTTPRequest/
+H = ./srcs/HTTPRequest/
 SRCSHTTP = $(H)HttpParser.cpp \
 			$(H)HttpResponse.cpp\
 			$(H)HttpModule.cpp\
@@ -39,7 +39,7 @@ RM = rm -f
 all: $(NAME)
 
 $(NAME): $(OBJS)
-	mkdir -p ./Core/www/upload
+	mkdir -p ./upload/www/upload
 	$(CXX) $(OBJS) $(CXXFLAGS) -o $(NAME)
 	@echo $(NAME)" compiled!\n"
 

@@ -18,8 +18,8 @@ int main(int ac, char **av)
 	std::string conf;
 	if (ac == 1)
 	{
-		std::cout << WARNING << " no config file given, using the default one of Core (./Core/Core.config)" << std::endl;
-		conf = "./Core/Core.config";
+		std::cout << WARNING << " no config file given, using the default one (./configs/Core.config)" << std::endl;
+		conf = "./configs/Core.config";
 	}
 	else
 		conf = av[1];
