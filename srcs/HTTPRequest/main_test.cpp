@@ -162,6 +162,13 @@ int main(int argc, char **argv)
 	));
 
 	tests.push_back(std::make_pair(
+		"DELETE root index forbidden",
+		"DELETE /index.html HTTP/1.1\r\n"
+		"Host: localhost:8080\r\n"
+		"\r\n"
+	));
+
+	tests.push_back(std::make_pair(
 		"GET traversal attempt -> forbidden",
 		"GET /images/../../secret.txt HTTP/1.1\r\n"
 		"Host: localhost:8080\r\n"

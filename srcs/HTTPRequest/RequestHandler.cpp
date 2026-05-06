@@ -496,9 +496,13 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 
 	if (request.method == "DELETE")
 	{
+		std::string deleteBase;
 		std::string filePath;
 
-		if (!buildFilePath(root, request.path, location, server, filePath))
+		if (!location || location->upload_dir.empty())
+			return buildErrorResponse(server, 403, request.path);
+		deleteBase = resolveUploadBase(server, location);
+		if (!buildFilePath(deleteBase, request.path, location, server, filePath))
 			return buildErrorResponse(server, 400, request.path);
 		if (!pathExists(filePath))
 			return buildErrorResponse(server, 404, filePath);
