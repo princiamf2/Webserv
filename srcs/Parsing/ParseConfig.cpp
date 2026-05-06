@@ -36,6 +36,22 @@ bool expectOpenBracket(std::istringstream& current_line, std::istringstream& str
     return true;
 }
 
+static bool hasListenConflict(const std::vector<ServerConfig>& serverlist, const ServerConfig& candidate)
+{
+    for (size_t i = 0; i < serverlist.size(); ++i)
+    {
+        for (std::set<unsigned int>::const_iterator iter = candidate.listen_ports.begin(); iter != candidate.listen_ports.end(); ++iter)
+        {
+            if (serverlist[i].listen_ports.count(*iter))
+            {
+                std::cerr << "Error -> multiple servers for same port " << *iter << std::endl;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 std::vector<ServerConfig> parseConfig(std::string path)
 {
     std::ifstream configFile(path.c_str());
@@ -66,6 +82,8 @@ std::vector<ServerConfig> parseConfig(std::string path)
                 return std::vector<ServerConfig>();
             ServerConfig server;
             if (!parseServer(stream, server))
+                return std::vector<ServerConfig>();
+            if (hasListenConflict(serverlist, server))
                 return std::vector<ServerConfig>();
             serverlist.push_back(server);
         }
