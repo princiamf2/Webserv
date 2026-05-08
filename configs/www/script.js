@@ -13,7 +13,7 @@ class WebservManager {
         this.setupCGITester();
         this.setupResponseTabs();
         this.checkServerStatus();
-        setInterval(() => this.checkServerStatus(), 5000);
+        setInterval(() => this.checkServerStatus(), 10000);
         this.log('info', 'Webserv Manager initialized');
     }
 
