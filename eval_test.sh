@@ -1035,10 +1035,20 @@ test_valgrind_best_effort() {
     fi
 
     local vg_log="$TMP_DIR/valgrind_webserv.log"
+    local vg_fifo="$TMP_DIR/valgrind_webserv.stdin"
     local vg_pid
 
-    timeout 90s valgrind --leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --track-fds=yes \
-        ./webserv configs/Core.config < <(tail -f /dev/null) > "$vg_log" 2>&1 &
+    rm -f "$vg_fifo"
+    if ! mkfifo "$vg_fifo"; then
+        skip "Valgrind: creation FIFO stdin impossible"
+        return 0
+    fi
+
+    # Keep the FIFO open to avoid immediate EOF on webserv stdin.
+    exec 9<>"$vg_fifo"
+
+    timeout 90s valgrind --leak-check=full --show-leak-kinds=all --show-reachable=yes --errors-for-leak-kinds=definite --track-fds=yes \
+        ./webserv configs/Core.config < "$vg_fifo" > "$vg_log" 2>&1 &
     vg_pid=$!
     sleep 2
 
@@ -1060,13 +1070,25 @@ test_valgrind_best_effort() {
     curl -s --max-time 4 -X POST --data "vg" "http://127.0.0.1:8080/upload/vg.txt" -o /dev/null || true
     curl -s --max-time 4 -X DELETE "http://127.0.0.1:8080/upload/vg.txt" -o /dev/null || true
 
-    kill -INT "$vg_pid" 2>/dev/null || true
+    # Ask webserv for a graceful shutdown before using signals.
+    printf 'q\n' >&9 || true
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         if ! kill -0 "$vg_pid" 2>/dev/null; then
             break
         fi
         sleep 1
     done
+
+    if kill -0 "$vg_pid" 2>/dev/null; then
+        kill -INT "$vg_pid" 2>/dev/null || true
+        for _ in 1 2 3 4 5; do
+            if ! kill -0 "$vg_pid" 2>/dev/null; then
+                break
+            fi
+            sleep 1
+        done
+    fi
+
     if kill -0 "$vg_pid" 2>/dev/null; then
         kill -TERM "$vg_pid" 2>/dev/null || true
         for _ in 1 2 3 4 5; do
@@ -1080,6 +1102,9 @@ test_valgrind_best_effort() {
         kill -KILL "$vg_pid" 2>/dev/null || true
     fi
     wait "$vg_pid" 2>/dev/null || true
+    exec 9>&-
+    exec 9<&-
+    rm -f "$vg_fifo"
 
     if grep -Eq 'definitely lost: +0 bytes' "$vg_log"; then
         pass "Valgrind: definitely lost = 0 bytes"
