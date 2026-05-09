@@ -1,5 +1,6 @@
 #include "./Server.hpp"
 #include "Core.hpp"
+#include <cctype>
 
 Server::Server(ServerConfig serv)
 {
@@ -84,7 +85,6 @@ void Server::finalizeCgi(int clientFd)
 	CgiResult result = CgiManager::buildFinalResult(_clients[clientFd].cgi);
 	CgiManager::cleanupProcess(_clients[clientFd].cgi);
 	_clients[clientFd].cgiActive = false;
-	std::cout << result.rawOutput << std::endl;
 	if (!result.success)
 		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(
 			buildErrorResponse(_conf, 500, "cgi failed"));
@@ -126,6 +126,13 @@ bool Server::startCgiForClient (int fd, ActionRequest const& action)
 	return true;
 }
 
+static std::string toLowerString(std::string s)
+{
+	for (size_t i = 0; i < s.size(); i++)
+		s[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(s[i])));
+	return s;
+}
+
 void Server::readClient(int fd, Core *core)
 {
 	char	buf[4096];
@@ -151,12 +158,14 @@ void Server::readClient(int fd, Core *core)
 		return ; // wiating for headers to end
 
 	size_t contentLength = 0;
-	size_t clPos = _clients[fd].readBuf.find("Content-Length: ");
+	std::string headersPart = _clients[fd].readBuf.substr(0, headerEnd);
+	std::string headersLower = toLowerString(headersPart);
+	size_t clPos = headersLower.find("content-length:");
 
 	if (clPos != std::string::npos && clPos < headerEnd)
 	{
-		size_t clEnd = _clients[fd].readBuf.find("\r\n", clPos);
-		std::string tmp = _clients[fd].readBuf.substr(clPos + 16, clEnd - clPos - 16);
+		size_t clEnd = headersPart.find("\r\n", clPos);
+		std::string tmp = headersPart.substr(clPos + 15, clEnd - clPos - 15);
 		contentLength = std::atoll(tmp.c_str());
 		if (_clientMaxBodySize > 0 && contentLength > _clientMaxBodySize)
 		{

@@ -93,6 +93,16 @@ void Core::runPoll()
 				client.cgi.error = true;
 				if (client.cgi.pid > 0 && !client.cgi.childExited)
 					kill(client.cgi.pid, SIGKILL);
+				if (client.cgi.stdinFd != -1)
+				{
+					_cgiWriteFdToClient.erase(client.cgi.stdinFd);
+					removePollFd(client.cgi.stdinFd);
+				}
+				if (client.cgi.stdoutFd != -1)
+				{
+					_cgiReadFdToClient.erase(client.cgi.stdoutFd);
+					removePollFd(client.cgi.stdoutFd);
+				}
 				srv->finalizeCgi(clientFd);
 			}
 		}
@@ -226,11 +236,27 @@ void Core::runPoll()
 			if (_cgiReadFdToClient.count(fd) && (_pollFds[i].revents & POLLHUP))
 			{
 				int clientFd = _cgiReadFdToClient[fd];
-				_fdClientToServer[clientFd]->finalizeCgi(clientFd);
-				_cgiReadFdToClient.erase(fd);
-				_pollFds.erase(_pollFds.begin() + i);
-				size--;
-				i--;
+				CgiProcess& cgi = _fdClientToServer[clientFd]->getClients()[clientFd].cgi;
+
+				if (!CgiManager::readOutput(cgi))
+				{
+					_fdClientToServer[clientFd]->finalizeCgi(clientFd);
+					_cgiReadFdToClient.erase(fd);
+					_pollFds.erase(_pollFds.begin() + i);
+					size--;
+					i--;
+					continue;
+				}
+
+				if (cgi.stdoutClosed)
+				{
+					_fdClientToServer[clientFd]->finalizeCgi(clientFd);
+					_cgiReadFdToClient.erase(fd);
+					_pollFds.erase(_pollFds.begin() + i);
+					size--;
+					i--;
+					continue;
+				}
 			}
 
 		}
