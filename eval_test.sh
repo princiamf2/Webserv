@@ -1045,7 +1045,7 @@ test_valgrind_best_effort() {
     fi
 
     # Keep the FIFO open to avoid immediate EOF on webserv stdin.
-    exec 9<>"$vg_fifo"
+    exec 9<>"$vg_fifo"  
 
     timeout 90s valgrind --leak-check=full --show-leak-kinds=all --show-reachable=yes --errors-for-leak-kinds=definite --track-fds=yes \
         ./webserv configs/Core.config < "$vg_fifo" > "$vg_log" 2>&1 &
