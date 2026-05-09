@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by mm-furi, nicolsan and malapoug.*
+*This project has been created as part of the 42 curriculum by mm-furi, nicolsan, malapoug.*
 
 ---
 

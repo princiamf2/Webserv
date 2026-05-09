@@ -468,12 +468,32 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		if (request.isMultipart)
 		{
 			uploadBody = request.uploadContent;
-			filePath = buildUniqueUploadPathWithExt(server, location, extensionFromFileName(request.uploadFilename));
+			std::string urlFile = extractFileName(request.path);
+			if (!request.path.empty() && request.path[request.path.size() - 1] != '/' && !urlFile.empty())
+			{
+				std::string uploadBase = resolveUploadBase(server, location);
+				if (!uploadBase.empty() && uploadBase[uploadBase.size() - 1] == '/')
+					filePath = uploadBase + urlFile;
+				else
+					filePath = uploadBase + "/" + urlFile;
+			}
+			else
+				filePath = buildUniqueUploadPathWithExt(server, location, extensionFromFileName(request.uploadFilename));
 		}
 		else
 		{
 			uploadBody = request.body;
-			filePath = buildUniqueUploadPath(server, location, request);
+			std::string urlFile = extractFileName(request.path);
+			if (!request.path.empty() && request.path[request.path.size() - 1] != '/' && !urlFile.empty())
+			{
+				std::string uploadBase = resolveUploadBase(server, location);
+				if (!uploadBase.empty() && uploadBase[uploadBase.size() - 1] == '/')
+					filePath = uploadBase + urlFile;
+				else
+					filePath = uploadBase + "/" + urlFile;
+			}
+			else
+				filePath = buildUniqueUploadPath(server, location, request);
 		}
 		if (!writeFileContent(filePath, uploadBody))
 			return buildErrorResponse(server, 500, filePath);
