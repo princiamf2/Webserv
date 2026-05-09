@@ -1106,7 +1106,7 @@ test_valgrind_best_effort() {
     exec 9<&-
     rm -f "$vg_fifo"
 
-    if grep -Eq 'definitely lost: +0 bytes' "$vg_log"; then
+    if grep -Eq 'definitely lost: +0 bytes' "$vg_log" || grep -q 'All heap blocks were freed -- no leaks are possible' "$vg_log"; then
         pass "Valgrind: definitely lost = 0 bytes"
     else
         fail "Valgrind: fuite potentielle (definitely lost non nul ou introuvable)"
