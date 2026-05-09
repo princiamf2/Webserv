@@ -454,6 +454,9 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		std::string filePath;
 		std::string uploadBody;
 
+		if (!location || location->upload_dir.empty())
+			return buildErrorResponse(server, 403, request.path);
+
 		if (!buildFilePath(root, request.path, location, server, filePath))
 			return buildErrorResponse(server, 400, request.path);
 
