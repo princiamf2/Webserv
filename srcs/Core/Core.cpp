@@ -112,6 +112,7 @@ void Core::runPoll()
 
 		int ret = poll(_pollFds.data(), _pollFds.size(), 1);
 
+		//poll retour : -1=error, 0=timeout, >0=ready FDs
 		if (ret == -1)
 		{
 			if (errno == EINTR)

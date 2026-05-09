@@ -410,6 +410,9 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 			std::string indexPath = joinPath(filePath,
 				resolveIndex(server, location));
 			bool indexExists = pathExists(indexPath);
+			//strict chmod 000 bug
+			//if (indexExists && !readFileContent(indexPath, fileContent))
+			//	return buildErrorResponse(server, 403, indexPath);
 
 			if (indexExists && readFileContent(indexPath, fileContent))
 			{
@@ -454,6 +457,8 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		std::string filePath;
 		std::string uploadBody;
 
+		//strict, a modifier si liberation POST
+		// 403 protege l'ecriture hors upload, 405 defendable si "methode non autorisee".
 		if (!location || location->upload_dir.empty())
 			return buildErrorResponse(server, 403, request.path);
 
@@ -501,6 +506,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		std::string deleteBase;
 		std::string filePath;
 
+		//403 securite hors upload 405 possible si "methode non autorisee".
 		if (!location || location->upload_dir.empty())
 			return buildErrorResponse(server, 403, request.path);
 		deleteBase = resolveUploadBase(server, location);
@@ -512,6 +518,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 			return buildErrorResponse(server, 403, filePath);
 		response.statusCode = 204;
 		response.reasonPhrase = "No Content";
+		// sur 204, Content-Type pas necessaire, le garder reste tolere par les clients.
 		response.headers["Content-Type"] = "text/plain";
 		response.body.clear();
 		return response;
