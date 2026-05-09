@@ -87,12 +87,23 @@
 <body>
     <div class="wrap">
         <h1>Browser Form Test (GET / POST)</h1>
-        <p>This page submits to <code>/cgi-bin/test.py</code>.</p>
+        <p>This page submits to Python CGI by default.</p>
+
+        <label for="cgiTarget"><strong>CGI target</strong></label>
+        <select id="cgiTarget" onchange="updateCgiTarget()">
+            <option value="python" selected>Python (/cgi-bin/test.py)</option>
+            <!-- PHP option kept for later when php-cgi is installed -->
+            <!-- <option value="php">PHP (/cgi-php/post_reader.php)</option> -->
+        </select>
+
+        <div class="hint">
+            Current target: <code id="targetPreview">/cgi-bin/test.py</code>
+        </div>
 
         <div class="grid">
             <fieldset>
                 <legend>GET form</legend>
-                <form method="GET" action="/cgi-bin/test.py">
+                <form id="getForm" method="GET" action="/cgi-bin/test.py">
                     <label for="getName">name</label>
                     <input id="getName" name="name" type="text" value="alice">
 
@@ -105,7 +116,7 @@
 
             <fieldset>
                 <legend>POST form (urlencoded)</legend>
-                <form method="POST" action="/cgi-bin/test.py">
+                <form id="postForm" method="POST" action="/cgi-bin/test.py">
                     <label for="postName">name</label>
                     <input id="postName" name="name" type="text" value="bob">
 
@@ -121,5 +132,21 @@
             Expected output from CGI: METHOD, QUERY, CONTENT_TYPE, RAW BODY and parsed POST fields.
         </div>
     </div>
+
+    <script>
+        function updateCgiTarget() {
+            var selector = document.getElementById('cgiTarget');
+            var target = '/cgi-bin/test.py';
+
+            // Keep PHP target logic documented for later use.
+            // if (selector.value === 'php') {
+            //     target = '/cgi-php/post_reader.php';
+            // }
+
+            document.getElementById('getForm').action = target;
+            document.getElementById('postForm').action = target;
+            document.getElementById('targetPreview').textContent = target;
+        }
+    </script>
 </body>
 </html>
