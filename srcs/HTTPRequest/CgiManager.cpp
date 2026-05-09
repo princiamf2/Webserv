@@ -441,9 +441,8 @@ bool CgiManager::writeInput(CgiProcess& process)
 		process.inputBuffer.c_str() + process.inputOffset,
 		process.inputBuffer.size() - process.inputOffset);
 
-	if (written < 0)
-		return false;
-	if (written == 0)
+	//write peut retourner 0 (aucun byte) ou -1 (erreur), les deux ferment stdin
+	if (written <= 0)
 		return false;
 
 	process.inputOffset += static_cast<size_t>(written);
@@ -466,6 +465,7 @@ bool CgiManager::readOutput(CgiProcess& process)
 		return true;
 
 	bytesRead = read(process.stdoutFd, buffer, sizeof(buffer));
+	//read=0 (EOF), <0 (erreur) -> ferme stdout, >0 -> continue
 	if (bytesRead < 0)
 		return false;
 	if (bytesRead == 0)

@@ -226,12 +226,8 @@ void Server::writeClient(int fd)
 
 	ssize_t bytes = send(fd, _clients[fd].writeBuf.c_str(),
 							 _clients[fd].writeBuf.size(), 0);
-	if (bytes < 0)
-	{
-		_clients[fd].toClose = true;
-		return ;
-	}
-	if (bytes == 0)
+	//send=0 (disconnect), <0 (erreur) -> ferme client
+	if (bytes <= 0)
 	{
 		_clients[fd].toClose = true;
 		return ;
