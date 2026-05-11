@@ -6,7 +6,7 @@
 /*   By: marvin <marvin@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/05/01 10:03:10 by marvin           ###   ########.fr       */
+/*   Updated: 2026/05/11 21:28:48 by malapoug         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -46,6 +46,7 @@ static std::string getReasonPhrase(int code)
 		case 403: return "Forbidden";
 		case 404: return "Not Found";
 		case 405: return "Method Not Allowed";
+		case 408: return "Request Timeout";
 		case 413: return "Payload Too Large";
 		case 500: return "Internal Server Error";
 		case 501: return "Not Implemented";

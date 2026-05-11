@@ -82,6 +82,7 @@ static std::string getReasonPhraseUtil(int code)
 		case 403: return "Forbidden";
 		case 404: return "Not Found";
 		case 405: return "Method Not Allowed";
+		case 408: return "Request Timeout";
 		case 413: return "Payload Too Large";
 		case 500: return "Internal Server Error";
 		case 501: return "Not Implemented";
