@@ -655,6 +655,34 @@ test_parsing_validation() {
         'server {\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 1000;\n    location /upload/ {\n        root ./configs/www/upload;\n        upload_dir tmp/upload;\n        methods GET POST DELETE;\n    }\n}\n'
 
     run_parser_case "$parser_bin" \
+        "parse: token invalide au niveau principal rejete" \
+        "reject" \
+        "ERROR: INVALID TOP-LEVEL TOKEN: invalide" \
+        "parse_invalid_top_level_token.conf" \
+        'invalide\nserver {\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: server avec token en trop avant { sur meme ligne rejete" \
+        "reject" \
+        "Error: expected '{'" \
+        "parse_invalid_server_header_inline_extra.conf" \
+        'server invalide {\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: server avec token en trop avant { sur ligne suivante rejete" \
+        "reject" \
+        "Error: expected '{'" \
+        "parse_invalid_server_header_split_extra.conf" \
+        'server invalide\n{\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: server puis { sur ligne suivante reste accepte" \
+        "accept" \
+        "nb de servers: 1" \
+        "parse_valid_server_header_split.conf" \
+        'server\n{\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n}\n'
+
+    run_parser_case "$parser_bin" \
         "parse: root et upload_dir absolus acceptes" \
         "accept" \
         "nb de servers: 1" \
