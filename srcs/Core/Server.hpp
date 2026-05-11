@@ -67,27 +67,28 @@ class Server
 		bool                        startCgiForClient(int fd, ActionRequest const& action);   // init and start the cgi requested
 
 	public:
-		Server(ServerConfig serv);                                    // base constructor
-		Server(const Server& other);                                  // base copy constructor
-		Server& operator=(const Server& other);                       // base copy assignation constructor
-		~Server();                                                    // base destructor
+		Server(ServerConfig serv);                                                            // base constructor
+		Server(const Server& other);                                                          // base copy constructor
+		Server& operator=(const Server& other);                                               // base copy assignation constructor
+		~Server();                                                                            // base destructor
 
-		int         init(void);                                       // init of the binds listen etc
-		void        addClient(int fd);                                // add a client to fds list
+		int         init(void);                                                               // init of the binds listen etc
+		void        addClient(int fd);                                                        // add a client to fds list
 		void        removeClient(int fd);
-		void        readClient(int fd, Core *core);                   // read what client sent
-		void        writeClient(int fd);                              // write to the client
-		void        closeClient(int fd);                              // close connection to client
+		void        readClient(int fd, Core *core);                                           // read what client sent
+		void        writeClient(int fd);                                                      // write to the client
+		void        closeClient(int fd);                                                      // close connection to client
 
-		std::vector<int>& getListenFds(void);                         // getter for fds
-		std::map<int, Client>&     getClients(void);                  // getter for clients
-		bool        clientToClose(int fd);                            // getter pour les toClose
-		bool clientWaitingBody(int fd);                               // getter for the waitingBody bool
-		bool        clientTimedOut(int fd, time_t now, int timeout);  // getter for the waitingBody bool
-		bool        clientHasData(int fd);                            // does a responce for the client exist or is a cgi active
+		std::vector<int>&          getListenFds(void);                                        // getter for fds
+		std::map<int, Client>&     getClients(void);                                          // getter for clients
+		ServerConfig&              getConf(void);                                             // getter for base config from parsing
+		bool                       clientToClose(int fd);                                     // getter pour les toClose
+		bool                       clientWaitingBody(int fd);                                 // getter for the waitingBody bool
+		bool                       clientTimedOut(int fd, time_t now, int timeout);           // getter for the waitingBody bool
+		bool                       clientHasData(int fd);                                     // does a responce for the client exist or is a cgi active
 
-		void finalizeCgi(int clientFd);                               // finalize cgi process and write response
-		void debug();                                                 // show server informations
+		void finalizeCgi(int clientFd);                                                       // finalize cgi process and write response
+		void debug();                                                                         // show server informations
 };
 
 //============(UTILS)====================//
