@@ -384,6 +384,41 @@ check_body_contains() {
     fi
 }
 
+run_parser_case() {
+    local parser_bin="$1"
+    local label="$2"
+    local mode="$3"
+    local expected="$4"
+    local rel_cfg="$5"
+    local content="$6"
+    local cfg_path="$TMP_DIR/$rel_cfg"
+    local output
+
+    printf "%b" "$content" > "$cfg_path"
+    output="$("$parser_bin" "$cfg_path" 2>&1 || true)"
+
+    if [[ "$mode" == "accept" ]]; then
+        if printf "%s" "$output" | grep -Fq "$expected"; then
+            pass "$label"
+        else
+            fail "$label -> parse non valide (motif absent: $expected)"
+            log "--- PARSER OUTPUT $rel_cfg ---"
+            printf "%s\n" "$output" | sed -n '1,80p' >> "$RESULT_FILE"
+            log "--- FIN PARSER OUTPUT ---"
+        fi
+        return
+    fi
+
+    if printf "%s" "$output" | grep -Fq "$expected"; then
+        pass "$label"
+    else
+        fail "$label -> rejet attendu (motif absent: $expected)"
+        log "--- PARSER OUTPUT $rel_cfg ---"
+        printf "%s\n" "$output" | sed -n '1,80p' >> "$RESULT_FILE"
+        log "--- FIN PARSER OUTPUT ---"
+    fi
+}
+
 
 check_header_contains() {
     local label="$1"
@@ -543,6 +578,88 @@ test_code_checks() {
     fi
 
     grep -q 'chdir' srcs/HTTPRequest/CgiManager.cpp && pass "CGI change de dossier via chdir()" || fail "chdir() absent de CgiManager.cpp"
+}
+
+test_parsing_validation() {
+    section "PARSING VALIDATION"
+
+    local parser_bin="$TMP_DIR/parsing_test_eval"
+
+    if c++ -Wall -Wextra -Werror -std=c++98 \
+        srcs/Parsing/main.cpp \
+        srcs/Parsing/ParseConfig.cpp \
+        srcs/Parsing/ParseServer.cpp \
+        srcs/Parsing/ParseLocation.cpp \
+        -I srcs/Parsing \
+        -o "$parser_bin" >> "$RESULT_FILE" 2>&1; then
+        pass "Compilation parsing_test_eval OK"
+    else
+        fail "Compilation parsing_test_eval echouee"
+        return 1
+    fi
+
+    run_parser_case "$parser_bin" \
+        "parse: client_max_body_size -2 rejete" \
+        "reject" \
+        "ERROR: CLIENT_MAX_BODY_SIZE MUST BE > 0: -2" \
+        "parse_invalid_bodysize_neg.conf" \
+        'server {\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size -2;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: client_max_body_size 0 rejete" \
+        "reject" \
+        "ERROR: CLIENT_MAX_BODY_SIZE MUST BE > 0: 0" \
+        "parse_invalid_bodysize_zero.conf" \
+        'server {\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 0;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: client_max_body_size > int max rejete" \
+        "reject" \
+        "ERROR: CLIENT_MAX_BODY_SIZE TOO LARGE: 2147483648" \
+        "parse_invalid_bodysize_big.conf" \
+        'server {\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 2147483648;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: client_max_body_size int max accepte" \
+        "accept" \
+        "client_max_body_size: 2147483647" \
+        "parse_valid_bodysize_max.conf" \
+        'server {\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 2147483647;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: root relatif explicite ./ accepte" \
+        "accept" \
+        "root  ./configs/www" \
+        "parse_valid_root_relative.conf" \
+        'server {\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 1000;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: root sans prefixe explicite rejete" \
+        "reject" \
+        "ERROR: ROOT MUST START BY '/' OR './'" \
+        "parse_invalid_root_prefix.conf" \
+        'server {\n    listen 8080;\n    domain_name localhost;\n    root configs/www;\n    index index.html;\n    client_max_body_size 1000;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: location root sans prefixe explicite rejete" \
+        "reject" \
+        "ERROR: LOCATION ROOT MUST START BY '/' OR './'" \
+        "parse_invalid_location_root_prefix.conf" \
+        'server {\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 1000;\n    location /browse/ {\n        root configs/www/browse;\n        methods GET;\n    }\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: upload_dir sans prefixe explicite rejete" \
+        "reject" \
+        "ERROR: WRONG UPLOAD_DIR MUST START BY '/' OR './'" \
+        "parse_invalid_upload_prefix.conf" \
+        'server {\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 1000;\n    location /upload/ {\n        root ./configs/www/upload;\n        upload_dir tmp/upload;\n        methods GET POST DELETE;\n    }\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: root et upload_dir absolus acceptes" \
+        "accept" \
+        "nb de servers: 1" \
+        "parse_valid_absolute_paths.conf" \
+        'server {\n    listen 8080;\n    domain_name localhost;\n    root /tmp;\n    index index.html;\n    client_max_body_size 1000;\n    location /upload/ {\n        root /tmp;\n        upload_dir /tmp;\n        methods GET POST DELETE;\n    }\n}\n'
 }
 
 test_core_runtime() {
@@ -1193,6 +1310,7 @@ main() {
     test_readme
     test_build || { print_summary; exit 1; }
     test_code_checks
+    test_parsing_validation
     test_core_runtime
     # Stop only after each config test block, before starting the next config.
     stop_server
