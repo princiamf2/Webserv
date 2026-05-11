@@ -263,7 +263,7 @@ static bool parseServer_ClientMaxBodySize(std::istringstream& lineStream, Server
     }
 
     std::istringstream in_string_stream(size_str);
-    unsigned int size;
+    long long size;
 
     if (!(in_string_stream >> size))
     {
@@ -284,6 +284,12 @@ static bool parseServer_ClientMaxBodySize(std::istringstream& lineStream, Server
         return false;
     }
 
+    if (size > 2147483647)
+    {
+        std::cerr << "ERROR: CLIENT_MAX_BODY_SIZE TOO LARGE: " << size << std::endl;
+        return false;
+    }
+
     std::string extra;
     if (lineStream >> extra)
     {
@@ -292,7 +298,7 @@ static bool parseServer_ClientMaxBodySize(std::istringstream& lineStream, Server
     }
 
     server.client_max_body_size_set = true;
-    server.client_max_body_size = size;
+    server.client_max_body_size = static_cast<unsigned int>(size);
     return true;
 }
 
