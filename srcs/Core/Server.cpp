@@ -257,6 +257,11 @@ std::map<int, Client>& Server::getClients(void)
 	return (_clients);
 }
 
+ServerConfig& Server::getConf(void)
+{
+	return (_conf);
+}
+
 bool Server::clientToClose(int fd)
 {
 	return (_clients[fd].toClose);

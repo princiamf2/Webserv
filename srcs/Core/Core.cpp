@@ -83,7 +83,14 @@ void Core::runPoll()
 
 			int timeout = srv->clientWaitingBody(clientFd) ? BODYTO : TIMEOUT;
 			if (srv->clientTimedOut(clientFd, now, timeout))
+			{
+				std::string response = HttpResponseBuilder::buildResponse(
+					buildErrorResponse(srv->getConf(), 408, "request timeout"));
+				send(clientFd, response.c_str(), response.size(), 0);
+
 				toClose.push_back(clientFd);
+			}
+
 			Client& client = srv->getClients()[clientFd];
 			if (client.cgiActive)
 				CgiManager::checkChild(client.cgi);
