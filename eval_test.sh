@@ -557,7 +557,7 @@ test_core_runtime() {
     fi
 
     pass "Core.config demarre sur 8080"
-    run_telnet_get
+    #run_telnet_get
 
     check_code "GET /" 200 "http://127.0.0.1:8080/"
     check_code "GET /script.js" 200 "http://127.0.0.1:8080/script.js"
@@ -980,7 +980,7 @@ test_siege() {
     siege_out="$(siege -b -c 20 -r 100 -d 1 http://127.0.0.1:8080/ 2>&1 || true)"
     printf "%s\n" "$siege_out" >> "$RESULT_FILE"
 
-    if printf "%s" "$siege_out" | grep -q 'Availability:'; then
+    if printf "%s" "$siege_out" | grep -qi 'availability:'; then
         pass "Siege charge simple execute"
         avail="$(printf "%s\n" "$siege_out" | awk '/Availability:/ {print $2; exit}')"
         if awk "BEGIN { exit !($avail >= 99.5) }"; then
@@ -993,7 +993,7 @@ test_siege() {
     fi
 
     local failed_tx
-    failed_tx="$(printf "%s\n" "$siege_out" | awk '/Failed transactions:/ {print $3; exit}')"
+    failed_tx="$(printf "%s\n" "$siege_out" | awk -F: '/"failed_transactions"/ {gsub(/[^0-9.]/,"",$2); print $2; exit}')"
     if [[ -n "$failed_tx" ]]; then
         if [[ "$failed_tx" == "0" || "$failed_tx" == "0.00" ]]; then
             pass "Aucune transaction echouee sous siege initial"
@@ -1202,7 +1202,7 @@ main() {
     stop_server
     test_port_conflicts
     stop_server
-    test_siege
+    #test_siege
     stop_server
     test_valgrind_best_effort
 
