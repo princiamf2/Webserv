@@ -1,5 +1,6 @@
 #include "Core.hpp"
 #include "Server.hpp"
+#include "webserv.hpp"
 #include <csignal>
 #include <sys/poll.h>
 
@@ -84,6 +85,7 @@ void Core::runPoll()
 			int timeout = srv->clientWaitingBody(clientFd) ? BODYTO : TIMEOUT;
 			if (srv->clientTimedOut(clientFd, now, timeout))
 			{
+				logs("408 timeout fd=" + toString(clientFd));
 				std::string response = HttpResponseBuilder::buildResponse(
 					buildErrorResponse(srv->getConf(), 408, "request timeout"));
 				send(clientFd, response.c_str(), response.size(), 0);
@@ -99,6 +101,7 @@ void Core::runPoll()
 			{
 				client.cgi.error = true;
 				client.cgi.timedOut = true; // timeout pour finalizeCgi (504)
+				logs("cgi timeout fd=" + toString(clientFd) + " pid=" + toString((int)client.cgi.pid));
 				if (client.cgi.pid > 0 && !client.cgi.childExited)
 					kill(client.cgi.pid, SIGKILL);
 				if (client.cgi.stdinFd != -1)
@@ -292,6 +295,7 @@ void Core::acceptClient(int listenFd)
 	if (clientFd == -1)
 		return ((void)error("Accept returned -1"));
 	fcntl(clientFd, F_SETFL, fcntl(clientFd, F_GETFL, 0) | O_NONBLOCK);
+	logs("accept client fd=" + toString(clientFd) + " listen fd=" + toString(listenFd));
 
 	struct pollfd pfd = {clientFd, POLLIN, 0};
 	_pollFds.push_back(pfd);
@@ -318,6 +322,7 @@ void Core::closeClient(int fd)
 	{
 		Server *srv = _fdClientToServer[fd];
 		Client &client = srv->getClients()[fd];
+		logs("close client fd=" + toString(fd));
 
 		if (client.cgiActive)
 		{

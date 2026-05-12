@@ -1,10 +1,23 @@
 #include "./webserv.hpp"
+#include <sstream>
 
 int error(std::string s)
 {
 	std::cerr << ERROR << s << std::endl;
 	perror(s.c_str());
 	return (FAIL);
+}
+
+std::string toString(int n)
+{
+	std::ostringstream oss;
+	oss << n;
+	return (oss.str());
+}
+
+void logs(std::string s)
+{
+	std::cout << "LOGS --->    " << s << std::endl;
 }
 
 void welcome()
