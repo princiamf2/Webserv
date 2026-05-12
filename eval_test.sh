@@ -777,13 +777,11 @@ test_core_runtime() {
     write_file "configs/www/cgi-bin/test.py" '#!/usr/bin/env python3\nimport time\nwhile True:\n    time.sleep(1)\n'
     chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
     local cgi_loop_code
-    local cgi_loop_rc
-    cgi_loop_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:8080/cgi-bin/test.py" 2>/dev/null)"
-    cgi_loop_rc=$?
-    if [[ "$cgi_loop_code" == "500" || "$cgi_loop_code" == "504" || "$cgi_loop_code" == "408" || "$cgi_loop_rc" -eq 28 ]]; then
-        pass "CGI boucle infinie geree sans crash (timeout ou erreur HTTP)"
+    cgi_loop_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:8080/cgi-bin/test.py" 2>/dev/null)"
+    if [[ "$cgi_loop_code" == "504" ]]; then
+        pass "CGI boucle infinie -> 504 Gateway Timeout"
     else
-        fail "CGI boucle infinie: comportement inattendu (http=$cgi_loop_code rc=$cgi_loop_rc)"
+        fail "CGI boucle infinie -> attendu=504 recu=$cgi_loop_code"
     fi
     restore_file "configs/www/cgi-bin/test.py"
     chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
