@@ -19,6 +19,10 @@ class Server;
 //error
 int error(std::string s);
 
+// s logs
+void logs(std::string s);
+std::string toString(int n);
+
 //clear
 
 //debug
