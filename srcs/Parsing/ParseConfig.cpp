@@ -17,21 +17,43 @@ bool stripSemicolon(std::string const& s, std::string& result)
 	return true;
 }
 
+// verifie qu'il reste un seul token sur la ligne, pas un mot en plus
+static bool extractSingleToken(std::istringstream& lineStream, std::string& token)
+{
+    std::string extra;
+
+    if (!(lineStream >> token))
+        return false;
+    if (lineStream >> extra)
+        return false;
+    return true;
+}
+
+// accepte soit "server {" sur une ligne, soit "server" puis "{" sur la ligne suivante
 bool expectOpenBracket(std::istringstream& current_line, std::istringstream& stream)
 {
     std::string bracket;
-    current_line >> bracket;
-    if (bracket != "{")
+    std::string nextLine;
+    std::istringstream nextLineStream;
+
+    if (extractSingleToken(current_line, bracket))
     {
-        std::getline(stream, bracket);
-        std::istringstream iss(bracket);
-        std::string bracket;
-        iss >> bracket;
-        if (bracket != "{")
-        {
-            std::cerr << "Error: expected '{'" << std::endl;
-            return false;
-        }
+        if (bracket == "{")
+            return true;
+        std::cerr << "Error: expected '{'" << std::endl;
+        
+        return false;
+    }
+    if (!std::getline(stream, nextLine))
+    {
+        std::cerr << "Error: expected '{'" << std::endl;
+        return false;
+    }
+    nextLineStream.str(nextLine);
+    if (!extractSingleToken(nextLineStream, bracket) || bracket != "{")
+    {
+        std::cerr << "Error: expected '{'" << std::endl;
+        return false;
     }
     return true;
 }
@@ -52,6 +74,7 @@ static bool hasListenConflict(const std::vector<ServerConfig>& serverlist, const
     return false;
 }
 
+// lit le fichier bloc par bloc et refuse ce qui n'est pas un vrai debut de server
 std::vector<ServerConfig> parseConfig(std::string path)
 {
     std::ifstream configFile(path.c_str());
@@ -87,6 +110,11 @@ std::vector<ServerConfig> parseConfig(std::string path)
                 return std::vector<ServerConfig>();
             serverlist.push_back(server);
         }
+		else
+		{
+            std::cerr << "ERROR: INVALID TOP-LEVEL TOKEN: " << name_to_parse << std::endl;
+			return std::vector<ServerConfig>();
+		}
     }
     return serverlist;
 }

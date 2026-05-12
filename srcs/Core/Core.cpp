@@ -1,5 +1,6 @@
 #include "Core.hpp"
 #include "Server.hpp"
+#include "webserv.hpp"
 #include <csignal>
 #include <sys/poll.h>
 
@@ -69,7 +70,7 @@ void Core::runPoll()
 	stdinPfd.revents = 0;
 	bool quit = 0;
 
-	_pollFds.insert(_pollFds.begin(), stdinPfd);
+	_pollFds.insert(_pollFds.begin(), stdinPfd); //pour le timeout et cmds bash
 	while (true)
 	{
 		if (quit == true)
@@ -84,11 +85,11 @@ void Core::runPoll()
 			int timeout = srv->clientWaitingBody(clientFd) ? BODYTO : TIMEOUT;
 			if (srv->clientTimedOut(clientFd, now, timeout))
 			{
-				std::string response = HttpResponseBuilder::buildResponse(
+				logs("408 timeout fd=" + toString(clientFd));
+				Client& client = srv->getClients()[clientFd];
+				client.writeBuf = HttpResponseBuilder::buildResponse(
 					buildErrorResponse(srv->getConf(), 408, "request timeout"));
-				send(clientFd, response.c_str(), response.size(), 0);
-
-				toClose.push_back(clientFd);
+				enableClientWrite(clientFd);
 			}
 
 			Client& client = srv->getClients()[clientFd];
@@ -98,6 +99,8 @@ void Core::runPoll()
 				&& now - client.cgi.startTime > CGI_TIMEOUT)
 			{
 				client.cgi.error = true;
+				client.cgi.timedOut = true; // timeout pour finalizeCgi (504)
+				logs("cgi timeout fd=" + toString(clientFd) + " pid=" + toString((int)client.cgi.pid));
 				if (client.cgi.pid > 0 && !client.cgi.childExited)
 					kill(client.cgi.pid, SIGKILL);
 				if (client.cgi.stdinFd != -1)
@@ -291,6 +294,7 @@ void Core::acceptClient(int listenFd)
 	if (clientFd == -1)
 		return ((void)error("Accept returned -1"));
 	fcntl(clientFd, F_SETFL, fcntl(clientFd, F_GETFL, 0) | O_NONBLOCK);
+	logs("accept client fd=" + toString(clientFd) + " listen fd=" + toString(listenFd));
 
 	struct pollfd pfd = {clientFd, POLLIN, 0};
 	_pollFds.push_back(pfd);
@@ -299,7 +303,7 @@ void Core::acceptClient(int listenFd)
 	_fdToServer[listenFd]->addClient(clientFd); // add client in server
 }
 
-void Core::removePollFd(int fd)
+void Core::removePollFd(int fd) 
 {
 	for (size_t i = 0; i < _pollFds.size(); ++i)
 	{
@@ -311,12 +315,25 @@ void Core::removePollFd(int fd)
 	}
 }
 
+void Core::enableClientWrite(int fd) // petite boucle pour activer le write d'un client dans poll (pour le timeout ou quand la reponse est prete)
+{
+	for (size_t i = 0; i < _pollFds.size(); ++i)
+	{
+		if (_pollFds[i].fd == fd)
+		{
+			_pollFds[i].events |= POLLOUT;
+			return ;
+		}
+	}
+}
+
 void Core::closeClient(int fd)
 {
 	if (_fdClientToServer.count(fd))
 	{
 		Server *srv = _fdClientToServer[fd];
 		Client &client = srv->getClients()[fd];
+		logs("close client fd=" + toString(fd));
 
 		if (client.cgiActive)
 		{
