@@ -3,15 +3,16 @@
 /*                                                        :::      ::::::::   */
 /*   CgiManager.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: marvin <marvin@student.42.fr>              +#+  +:+       +#+        */
+/*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/05/11 21:28:48 by malapoug         ###   ########.fr       */
+/*   Updated: 2026/05/12 21:55:02 by michel           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "CgiManager.hpp"
 
+#include <cctype>
 #include <string>
 #include <sys/types.h>
 #include <unistd.h>
@@ -70,23 +71,6 @@ static std::string intToStringLocal(int n)
 	return oss.str();
 }
 
-static bool locationMatchesLocal(const std::string& requestPath,
-	const std::string& locationPath)
-{
-	if (locationPath.empty())
-		return false;
-	if (requestPath == locationPath)
-		return true;
-	if (requestPath.find(locationPath) != 0)
-		return false;
-	if (locationPath[locationPath.size() - 1] == '/')
-		return true;
-	if (requestPath.size() > locationPath.size()
-		&& requestPath[locationPath.size()] == '/')
-		return true;
-	return false;
-}
-
 bool CgiManager::isCgiRequest(const std::string& filePath,
 	const Location* location)
 {
@@ -134,30 +118,36 @@ std::string CgiManager::getDirectoryPath(const std::string& path)
 	return path.substr(0, slashPos);
 }
 
+static std::string toCgiHeaderName(std::string key)
+{
+	for (size_t i = 0; i < key.size(); ++i)
+	{
+		if (key[i] == '-')
+			key[i] = '_';
+		else
+			key[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(key[i])));
+	}
+	return "HTTP_" + key;
+}
+
 char** CgiManager::buildCgiEnv(const HttpRequest& request,
 	const ServerConfig& server,
-	const Location* location)
+	const Location* location, const std::string& scriptPath,
+	const std::string& scriptName, const std::string& pathInfo)
 {
+	(void)location;
 	std::vector<std::string> envStrings;
 	char** env;
-	std::string scriptName;
 	std::string contentLength;
 	std::map<std::string, std::string>::const_iterator it;
 
-	scriptName = request.path;
-	if (location && locationMatchesLocal(request.path, location->path))
-	{
-		scriptName = request.path.substr(location->path.size());
-		if (scriptName.empty())
-			scriptName = "/";
-	}
 	contentLength = intToStringLocal(static_cast<int>(request.body.size()));
 
 	envStrings.push_back("REQUEST_METHOD=" + request.method);
 	envStrings.push_back("QUERY_STRING=" + request.query);
 	envStrings.push_back("SCRIPT_NAME=" + scriptName);
-	envStrings.push_back("SCRIPT_FILENAME=" + scriptName);
-	envStrings.push_back("PATH_INFO=" + scriptName);
+	envStrings.push_back("SCRIPT_FILENAME=" + scriptPath);
+	envStrings.push_back("PATH_INFO=" + pathInfo);
 	envStrings.push_back("REQUEST_URI=" + request.uri);
 	envStrings.push_back("CONTENT_LENGTH=" + contentLength);
 	envStrings.push_back("DOCUMENT_ROOT=" + server.root);
@@ -190,6 +180,17 @@ char** CgiManager::buildCgiEnv(const HttpRequest& request,
 		envStrings.push_back("HTTP_HOST=" + it->second);
 	else
 		envStrings.push_back("HTTP_HOST=");
+	for (std::map<std::string, std::string>::const_iterator hit = request.headers.begin();
+		hit != request.headers.end(); ++hit)
+	{
+		if (hit->first == "content-type" || hit->first == "content-length")
+			continue;
+		if (hit->first == "host")
+			continue;
+		if (hit->first == "transfer-encoding")
+			continue;
+		envStrings.push_back(toCgiHeaderName(hit->first) + "=" + hit->second);
+	}
 
 	env = new char*[envStrings.size() + 1];
 	for (size_t i = 0; i < envStrings.size(); ++i)
@@ -339,6 +340,8 @@ bool CgiManager::startProcess(CgiProcess& process,
 	const ServerConfig& server,
 	const Location* location,
 	const std::string& scriptPath,
+	const std::string& scriptName,
+	const std::string& pathInfo,
 	const std::string& interpreter)
 {
 	int inputPipe[2];
@@ -347,7 +350,8 @@ bool CgiManager::startProcess(CgiProcess& process,
 	char** envp;
 	char* argv[3];
 	std::string scriptDir;
-	std::string scriptName;
+	std::string executableName;
+	std::string executablePath;
 
 	if (pipe(inputPipe) == -1)
 		return false;
@@ -381,25 +385,25 @@ bool CgiManager::startProcess(CgiProcess& process,
 		close(outputPipe[1]);
 
 		scriptDir = getDirectoryPath(scriptPath);
-		scriptName = getScriptName(scriptPath);
+		executableName = getScriptName(scriptPath);
+		executablePath = "./" + executableName;
 		if (chdir(scriptDir.c_str()) == -1)
 			std::exit(1);
 
-		envp = buildCgiEnv(request, server, location);
+		envp = buildCgiEnv(request, server, location, scriptPath, scriptName, pathInfo);
 
 		if (!interpreter.empty())
 		{
 			argv[0] = const_cast<char*>(interpreter.c_str());
-			argv[1] = const_cast<char*>(scriptName.c_str());
+			argv[1] = const_cast<char*>(executableName.c_str());
 			argv[2] = NULL;
 		}
 		else
 		{
-			argv[0] = const_cast<char*>(scriptName.c_str());
+			argv[0] = const_cast<char*>(executablePath.c_str());
 			argv[1] = NULL;
 			argv[2] = NULL;
 		}
-
 		execve(argv[0], argv, envp);
 		freeCgiEnv(envp);
 		std::exit(1);

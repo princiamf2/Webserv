@@ -20,6 +20,8 @@ class CgiManager
 			const ServerConfig& server,
 			const Location* location,
 			const std::string& scriptPath,
+			const std::string& scriptName,
+			const std::string& pathInfo,
 			const std::string& interpreter);
 
 		static bool writeInput(CgiProcess& process);
@@ -35,7 +37,7 @@ class CgiManager
 		~CgiManager();
 		static std::string getScriptName(const std::string& scriptPath);
 		static std::string getDirectoryPath(const std::string& path);
-		static char** buildCgiEnv(const HttpRequest& request, const ServerConfig& server, const Location* location);
+		static char** buildCgiEnv(const HttpRequest& request, const ServerConfig& server, const Location* location, const std::string& scriptPath, const std::string& scriptName, const std::string& pathInfo);
 		static void freeCgiEnv(char** envp);
 		static std::string trim(const std::string& s);
 		static int parseCgiStatusCode(const std::string& value);

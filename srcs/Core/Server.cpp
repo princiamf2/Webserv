@@ -120,7 +120,7 @@ bool Server::clientTimedOut(int fd, time_t now, int timeout)
 bool Server::startCgiForClient (int fd, ActionRequest const& action)
 {
 	Client& client = _clients[fd];
-	if (!CgiManager::startProcess(client.cgi, action.request, _conf, action.location, action.scriptPath, action.interpreter))
+	if (!CgiManager::startProcess(client.cgi, action.request, _conf, action.location, action.scriptPath, action.scriptName, action.pathInfo, action.interpreter))
 		return false;
 	client.cgiActive = true;
 	return true;

@@ -17,6 +17,7 @@ class HttpRequest
         std::string body;
 
         bool    isMultipart;
+        bool    isChunked;
         std::string uploadFilename;
         std::string uploadContentType;
         std::string uploadContent;

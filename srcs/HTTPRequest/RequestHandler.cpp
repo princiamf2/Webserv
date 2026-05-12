@@ -1,8 +1,12 @@
 #include "RequestHandler.hpp"
 #include "CgiManager.hpp"
 #include "HttpRequest.hpp"
+#include "HttpResponse.hpp"
 #include "RequestAction.hpp"
 #include "RequestUtils.hpp"
+#include <cstddef>
+#include <locale>
+#include <set>
 #include <sstream>
 #include <fstream>
 #include <string>
@@ -10,6 +14,18 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <ctime>
+#include <cstdlib>
+
+struct SessionData
+{
+	int views;
+	time_t createdAt;
+	time_t lastSeen;
+
+	SessionData() : views(0), createdAt(0), lastSeen(0) {}
+};
+
+static std::map<std::string, SessionData> g_sessions;
 
 //canonic
 RequestHandler::RequestHandler() {}
@@ -351,6 +367,74 @@ static HttpResponse buildMethodNotAllowedResponse(ServerConfig const& server,
 	response.headers["Allow"] = buildAllowHeader(location);
 	return response;
 }
+static std::string generateSessionId()
+{
+	static unsigned long counter = 0;
+	std::ostringstream oss;
+
+	++counter;
+	oss << std::hex
+		<< std::time(NULL)
+		<< "_"
+		<< counter
+		<< "_"
+		<< std::rand();
+	return oss.str();
+}
+static std::string getCookieValue(HttpRequest const& request, std::string const& name)
+{
+	std::map<std::string, std::string>::const_iterator it;
+	std::string cookies;
+	size_t pos;
+
+	it = request.headers.find("cookie");
+	if (it == request.headers.end())
+		return "";
+	cookies = it->second;
+	pos = 0;
+	while (pos < cookies.size())
+	{
+		size_t end = cookies.find(';', pos);
+		std::string part;
+		if (end == std::string::npos)
+			end = cookies.size();
+		part = cookies.substr(pos, end - pos);
+		part = trim(part);
+		size_t eq = part.find('=');
+		if (eq != std::string::npos)
+		{
+			std::string key = trim(part.substr(0, eq));
+			std::string value = trim(part.substr(eq + 1));
+			if (key == name)
+				return value;
+		}
+		pos = end + 1;
+	}
+	return "";
+}
+
+static std::string ensureSession(HttpRequest const& request, HttpResponse& response)
+{
+	std::string sid;
+	time_t now;
+
+	now = std::time(NULL);
+	sid = getCookieValue(request, "session_id");
+	if (sid.empty() || g_sessions.find(sid) == g_sessions.end())
+	{
+		sid = generateSessionId();
+		SessionData data;
+		data.createdAt = now;
+		data.lastSeen = now;
+		data.views = 0;
+		g_sessions[sid] = data;
+
+		response.headers["Set-Cookie"] = "session_id=" + sid + "; Path=/; HttpOnly; SameSite=Lax";
+	}
+	g_sessions[sid].views++;
+	g_sessions[sid].lastSeen = now;
+	return sid;
+}
 //on fait une validation et on met les code d'erreur et les message d'erreur
 HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 	ServerConfig const& server, Location const* location)
@@ -393,15 +477,25 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 	{
 		std::string fileContent;
 		std::string filePath;
-		std::time_t now = std::time(NULL);
-		std::tm *t = std::localtime(&now);
+		std::string sid = ensureSession(request, response);
 
-		std::stringstream ss;
-		ss << "session_id="
-		<< t->tm_hour << ":"
-		<< t->tm_min << ":"
-		<< t->tm_sec
-		<< "; Path=/";
+		if (request.path == "/session")
+		{
+			std::ostringstream body;
+			SessionData const& data = g_sessions[sid];
+
+			body << "Session ID: " << sid << "\n";
+			body << "Views: " << data.views << "\n";
+			body << "Created at: " << data.createdAt << "\n";
+			body << "Last seen: " << data.lastSeen << "\n";
+
+			response.statusCode = 200;
+			response.reasonPhrase = getReasonPhrase(200);
+			response.headers["Content-Type"] = "text/plain";
+			response.body = body.str();
+			applyHeadLogic(response, request);
+			return response;
+		}
 
 		if (!buildFilePath(root, request.path, location, server, filePath))
 			return buildErrorResponse(server, 400, request.path);
@@ -420,7 +514,6 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 				response.statusCode = 200;
 				response.reasonPhrase = getReasonPhrase(200);
 				response.headers["Content-Type"] = getContentType(indexPath);
-				response.headers["Set-Cookie"] = ss.str();
 				response.body = fileContent;
 				applyHeadLogic(response, request);
 				return response;
@@ -431,7 +524,6 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 				response.statusCode = 200;
 				response.reasonPhrase = getReasonPhrase(200);
 				response.headers["Content-Type"] = "text/html";
-				response.headers["Set-Cookie"] = ss.str();
 				response.body = fileContent;
 				applyHeadLogic(response, request);
 				return response;
@@ -447,7 +539,6 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		response.statusCode = 200;
 		response.reasonPhrase = getReasonPhrase(200);
 		response.headers["Content-Type"] = getContentType(filePath);
-		response.headers["Set-Cookie"] = ss.str();
 		response.body = fileContent;
 		applyHeadLogic(response, request);
 		return response;
@@ -516,8 +607,6 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		response.reasonPhrase = "Created";
 		response.headers["Content-Type"] = "text/plain";
 		response.headers["Location"] = locationHeader;
-		response.headers["Set-Cookie"] = "last_upload="
-			+ fileName + "; Path=/";
 		response.body = "File created at: " + locationHeader + "\n";
 		return response;
 	}
@@ -547,6 +636,38 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 	return buildErrorResponse(server, 500);
 }
 
+static bool findCgiScriptInPath(std::string const& requestPath, Location const* location,
+	std::string& scriptName, std::string& pathInfo)
+{
+	size_t bestPos = std::string::npos;
+	std::string bestExt;
+
+	if (!location)
+		return false;
+	for (std::set<std::string>::const_iterator it = location->cgi_extensions.begin();
+		it != location->cgi_extensions.end(); ++it)
+	{
+		size_t pos = requestPath.find(*it);
+		if (pos == std::string::npos)
+			continue;
+		size_t end = pos + it->size();
+		if (end < requestPath.size() && requestPath[end] != '/')
+			continue;
+		if (bestPos == std::string::npos || end < bestPos + bestExt.size())
+		{
+			bestPos = pos;
+			bestExt = *it;
+		}
+	}
+	if (bestPos == std::string::npos)
+		return false;
+
+	size_t scriptEnd = bestPos + bestExt.size();
+	scriptName = requestPath.substr(0, scriptEnd);
+	pathInfo = requestPath.substr(scriptEnd);
+	return true;
+}
+
 ActionRequest RequestHandler::resolveAction(HttpRequest const& request,
 	ServerConfig const& server, Location const* location)
 {
@@ -554,6 +675,9 @@ ActionRequest RequestHandler::resolveAction(HttpRequest const& request,
 	std::string root;
 	std::string filePath;
 	std::string extension;
+	std::string scriptName;
+	std::string pathInfo;
+
 
 	root = resolveRoot(server, location);
 
@@ -569,7 +693,8 @@ ActionRequest RequestHandler::resolveAction(HttpRequest const& request,
 	}
 	if ((request.method == "GET" || request.method == "HEAD"
 			|| request.method == "POST")
-		&& buildFilePath(root, request.path, location, server, filePath)
+		&& findCgiScriptInPath(request.path, location, scriptName, pathInfo)
+		&& buildFilePath(root, scriptName, location, server, filePath)
 		&& CgiManager::isCgiRequest(filePath, location))
 	{
 		if (!pathExists(filePath))
@@ -585,6 +710,8 @@ ActionRequest RequestHandler::resolveAction(HttpRequest const& request,
 		action.request = request;
 		action.location = location;
 		action.scriptPath = filePath;
+		action.scriptName = scriptName;
+		action.pathInfo = pathInfo;
 		return action;
 	}
 	action.type = ACTION_IMMEDIATE_RESPONSE;
