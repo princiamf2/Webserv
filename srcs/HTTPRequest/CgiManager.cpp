@@ -6,11 +6,12 @@
 /*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/05/12 21:55:02 by michel           ###   ########.fr       */
+/*   Updated: 2026/05/13 00:37:46 by michel           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "CgiManager.hpp"
+#include "../Core/webserv.hpp"
 
 #include <cctype>
 #include <string>
@@ -426,6 +427,7 @@ bool CgiManager::startProcess(CgiProcess& process,
 	process.error = false;
 	process.exitStatus = 0;
 	process.startTime = time(NULL);
+	logs("cgi process forked pid=" + toString((int)pid) + " script=" + scriptPath);
 	return true;
 }
 
@@ -499,6 +501,7 @@ bool CgiManager::checkChild(CgiProcess& process)
 
 	process.childExited = true;
 	process.exitStatus = status;
+	logs("cgi child exited pid=" + toString((int)process.pid) + " status=" + toString(status));
 	return true;
 }
 
@@ -529,4 +532,6 @@ void CgiManager::cleanupProcess(CgiProcess& process)
 	process.stdoutFd = -1;
 	process.stdinClosed = true;
 	process.stdoutClosed = true;
+	process.error = false;
+	process.timedOut = false;
 }

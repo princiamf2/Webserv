@@ -56,6 +56,7 @@ class Core
 		void registerCgi(int clientFd, int stdinFd, int stdoutFd);   // register a cgi to Core
 		void acceptClient(int listenFd);                             // add a client to fds list
 		void closeClient(int fd);                                    // close and remove client
+		void enableClientWrite(int fd);                              // write to client when response is ready
 		void removePollFd(int fd);
 		
 		void debug();                                                // show core and servers infos

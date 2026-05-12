@@ -1,5 +1,6 @@
 #include "./Server.hpp"
 #include "Core.hpp"
+#include "webserv.hpp"
 #include <cctype>
 
 Server::Server(ServerConfig serv)
@@ -83,13 +84,32 @@ void Server::finalizeCgi(int clientFd)
 {
 	CgiManager::checkChild(_clients[clientFd].cgi);
 	CgiResult result = CgiManager::buildFinalResult(_clients[clientFd].cgi);
+	bool wasTimeout = _clients[clientFd].cgi.timedOut;
 	CgiManager::cleanupProcess(_clients[clientFd].cgi);
 	_clients[clientFd].cgiActive = false;
 	if (!result.success)
+	{
+		int errorCode;
+		std::string errorMsg;
+		if (wasTimeout)
+		{
+			errorCode = 504;
+			errorMsg = "cgi timeout";
+		}
+		else
+		{
+			errorCode = 500;
+			errorMsg = "cgi failed";
+		}
+		logs("cgi finalize fd=" + toString(clientFd) + " -> " + errorMsg);
 		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(
-			buildErrorResponse(_conf, 500, "cgi failed"));
+			buildErrorResponse(_conf, errorCode, errorMsg));
+	}
 	else
+	{
+		logs("cgi finalize fd=" + toString(clientFd) + " -> 200");
 		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(result.response);
+	}
 }
 
 bool Server::clientWaitingBody(int fd)
@@ -105,10 +125,12 @@ void Server::addClient(int fd)
 	c.cgiActive = false;
 	c.lastActivity = time(NULL);
 	_clients[fd] = c;
+	logs("client added fd=" + toString(fd));
 }
 
 void Server::removeClient(int fd)
 {
+	logs("client removed fd=" + toString(fd));
 	_clients.erase(fd);
 }
 
@@ -142,11 +164,15 @@ void Server::readClient(int fd, Core *core)
 	{
 		if (_clients[fd].waitingBody)
 		{
+			logs("body incomplete fd=" + toString(fd));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(buildErrorResponse(_conf, 400, "incomplete request body"));
 			_clients[fd].waitingBody = false;
 		}
 		else
+		{
+			logs("recv closed fd=" + toString(fd));
 			_clients[fd].toClose = true;
+		}
 		return ;
 	}
 	_clients[fd].lastActivity = time(NULL);
@@ -169,6 +195,7 @@ void Server::readClient(int fd, Core *core)
 		contentLength = std::atoll(tmp.c_str());
 		if (_clientMaxBodySize > 0 && contentLength > _clientMaxBodySize)
 		{
+			logs("payload too large fd=" + toString(fd) + " content-length=" + toString((int)contentLength));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 				buildErrorResponse(_conf, 413, "payload too large"));
 			_clients[fd].waitingBody = false;
@@ -178,6 +205,7 @@ void Server::readClient(int fd, Core *core)
 		size_t bodySize = _clients[fd].readBuf.size() - (headerEnd + 4);
 		if (_clientMaxBodySize > 0 && bodySize > _clientMaxBodySize)
 		{
+			logs("payload too large fd=" + toString(fd) + " body-size=" + toString((int)bodySize));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 				buildErrorResponse(_conf, 413, "payload too large"));
 			_clients[fd].waitingBody = false;
@@ -186,6 +214,7 @@ void Server::readClient(int fd, Core *core)
 		}
 		if (bodySize < contentLength)
 		{
+			logs("waiting body fd=" + toString(fd) + " received=" + toString((int)bodySize) + " expected=" + toString((int)contentLength));
 			_clients[fd].waitingBody = true;
 			return ; // incomplete body
 		}
@@ -203,14 +232,22 @@ void Server::readClient(int fd, Core *core)
 				_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 					buildErrorResponse(_conf, 500, action.scriptPath));
 			else
+			{
+				logs("cgi start fd=" + toString(fd) + " pid=" + toString((int)_clients[fd].cgi.pid) + " script=" + action.scriptPath);
 				core->registerCgi(_clients[fd].fd, _clients[fd].cgi.stdinFd, _clients[fd].cgi.stdoutFd);
+			}
 		}
 		else
+		{
+			logs("request fd=" + toString(fd) + " " + request.method + " " + request.path);
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(action.response);
+			logs("response queued fd=" + toString(fd) + " status=" + toString(action.response.statusCode));
+		}
 	}
 	catch (std::exception const& e)
 	{
 		(void)e;
+		logs("bad request fd=" + toString(fd));
 		_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 			buildErrorResponse(_conf, 400, "bad request"));
 	}
@@ -229,12 +266,16 @@ void Server::writeClient(int fd)
 	//send=0 (disconnect), <0 (erreur) -> ferme client
 	if (bytes <= 0)
 	{
+		logs("send failed fd=" + toString(fd));
 		_clients[fd].toClose = true;
 		return ;
 	}
 	_clients[fd].writeBuf.erase(0, bytes); // remove only added bytes
 	if (_clients[fd].writeBuf.empty())
+	{
+		logs("response sent fd=" + toString(fd));
 		_clients[fd].toClose = true;
+	}
 	_clients[fd].lastActivity = time(NULL);
 }
 

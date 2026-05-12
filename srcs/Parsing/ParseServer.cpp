@@ -78,11 +78,11 @@ static bool parseServer_Root(std::istringstream& lineStream, ServerConfig& serve
         return false;
     }
 
-    // if (value[0] != '/')
-    // {
-    //     std::cerr << "ERROR: ROOT MUST START BY '/'" << std::endl;
-    //     return false;
-    // }
+    if (!(value[0] == '/' || value.find("./") == 0))
+    {
+        std::cerr << "ERROR: ROOT MUST START BY '/' OR './'" << std::endl;
+        return false;
+    }
 
     if (value.find("..") != std::string::npos)
     {
@@ -263,7 +263,7 @@ static bool parseServer_ClientMaxBodySize(std::istringstream& lineStream, Server
     }
 
     std::istringstream in_string_stream(size_str);
-    unsigned int size;
+    long long size;
 
     if (!(in_string_stream >> size))
     {
@@ -284,6 +284,12 @@ static bool parseServer_ClientMaxBodySize(std::istringstream& lineStream, Server
         return false;
     }
 
+    if (size > 2147483647)
+    {
+        std::cerr << "ERROR: CLIENT_MAX_BODY_SIZE TOO LARGE: " << size << std::endl;
+        return false;
+    }
+
     std::string extra;
     if (lineStream >> extra)
     {
@@ -292,7 +298,7 @@ static bool parseServer_ClientMaxBodySize(std::istringstream& lineStream, Server
     }
 
     server.client_max_body_size_set = true;
-    server.client_max_body_size = size;
+    server.client_max_body_size = static_cast<unsigned int>(size);
     return true;
 }
 
@@ -349,7 +355,7 @@ bool parseServer(std::istringstream& stream, ServerConfig& server) //parse un se
 		}
 		else
 		{
-			std::cerr << "ERROR: UNKNOWN SERVER DIRECTIVE: " << word_to_parse << std::endl;
+			std::cerr << "ERROR: UNKNOWN SERVER DIR: " << word_to_parse << std::endl;
 			return false;
 		}
 	}
@@ -360,13 +366,18 @@ bool parseServer(std::istringstream& stream, ServerConfig& server) //parse un se
 	}
 	if (server.listen_ports.empty())
 	{
-    	std::cerr << "ERROR: SERVER HAS NO LISTEN DIRECTIVE" << std::endl;
+    	std::cerr << "ERROR: SERVER HAS NO LISTEN DIR" << std::endl;
     	return false;
 	}
 	if (server.root.empty())
 	{
-		std::cerr << "ERROR: SERVER HAS NO ROOT DIRECTIVE" << std::endl;
+		std::cerr << "ERROR: SERVER HAS NO ROOT DI" << std::endl;
 		return false;
 	}
+    if (server.domain_names.empty())
+    {
+        std::cerr << "ERROR: SERVER HAS NO DOMAIN_NAME DIR" << std::endl;
+        return false;
+    }
 	return true;
 }
