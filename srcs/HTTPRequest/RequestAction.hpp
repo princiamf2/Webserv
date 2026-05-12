@@ -4,6 +4,7 @@
 #include "HttpRequest.hpp"
 #include "HttpResponse.hpp"
 #include "../Parsing/Location.hpp"
+#include <string>
 
 enum ActionRequestType
 {
@@ -19,6 +20,8 @@ struct ActionRequest
 	Location const* location;
 	std::string scriptPath;
 	std::string interpreter;
+	std::string scriptName;
+	std::string pathInfo;
 
 	ActionRequest() : type(ACTION_IMMEDIATE_RESPONSE), location(NULL) {}
 };

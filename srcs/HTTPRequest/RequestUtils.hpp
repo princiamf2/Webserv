@@ -10,5 +10,6 @@ std::string resolveRoot(ServerConfig const& server, Location const* location);
 bool buildFilePath(std::string const& root, std::string const& path, Location const* location, ServerConfig const& server, std::string& filePath);
 std::string getFileExtension(std::string const& filePath);
 HttpResponse buildErrorResponse(ServerConfig const& server, int code, std::string const& path = "", bool directoryListingDenied = false);
+std::string trim(const std::string& str);
 
 #endif

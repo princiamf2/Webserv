@@ -1,5 +1,6 @@
 #include "HttpParser.hpp"
 #include "HttpRequest.hpp"
+#include "RequestUtils.hpp"
 #include <cstddef>
 #include <sstream>
 #include <stdexcept>
@@ -12,19 +13,6 @@ HttpParser::HttpParser() {}
 HttpParser::HttpParser(HttpParser const& other) {(void)other;}
 HttpParser& HttpParser::operator=(HttpParser const& other) {(void)other; return *this;}
 HttpParser::~HttpParser() {}
-
-// petit outil pour retirer espace au debut et a la fin
-static std::string trim(const std::string& str)
-{
-    size_t start = 0;
-    size_t end = str.size();
-
-    while (start < str.size() && (str[start] == ' ' || str[start] == '\t' || str[start] == '\r'))
-        start++;
-    while (end > start && (str[end - 1] == ' ' || str[end - 1] == '\t' || str[end - 1] == '\r'))
-        end--;
-    return str.substr(start, end - start);
-}
 
 static std::string toLowerString(std::string s)
 {
@@ -153,6 +141,46 @@ static void parseMultipartBody(HttpRequest& request)
     request.isMultipart = true;
 }
 
+static bool hexToSize(std::string const&  hex, size_t& value)
+{
+    std::istringstream iss(hex);
+
+    iss >> std::hex >> value;
+    return !iss.fail();
+}
+
+static bool decodeChunkendBody(std::string const& rawBody, std::string& decoded)
+{
+    size_t pos = 0;
+
+    decoded.clear();
+    while (true)
+    {
+        size_t lineEnd = rawBody.find("\r\n", pos);
+        if (lineEnd == std::string::npos)
+            return false;
+        std::string sizeLine = rawBody.substr(pos, lineEnd - pos);
+        size_t semi = sizeLine.find(';');
+        if (semi != std::string::npos)
+            sizeLine = sizeLine.substr(0, semi);
+        size_t chunkSize = 0;
+        if (!hexToSize(sizeLine, chunkSize))
+            return false;
+        pos = lineEnd + 2;
+        if (chunkSize == 0)
+            return true;
+        if (pos + chunkSize > rawBody.size())
+            return false;
+        decoded.append(rawBody, pos, chunkSize);
+        pos += chunkSize;
+        if (pos + 2 > rawBody.size())
+            return false;
+        if (rawBody[pos] != '\r' || rawBody[pos + 1] != '\n')
+            return false;
+        pos += 2;
+    }
+}
+
 HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
 {
     HttpRequest request;//une requete
@@ -162,8 +190,6 @@ HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
         throw std::runtime_error("Invalid HTTP request: missing header/body separator");
 
     std::string headerPart = rawRequest.substr(0, headerEnd);//je stock la partie header de la requete du debut de la requte jusqu'au separateur
-    request.body = rawRequest.substr(headerEnd + 4);//et je stock le body dans request.body car la s'est le header qui m'interresse
-
     std::istringstream stream(headerPart);//ici je transforme la partie header en flux ce qui veux dire que ça va lire la ligne un peux comme un file en prenant chaque mot separe par des espace meme multiple
     std::string line;//la variable que je vais utiliser dans getline
 
@@ -198,6 +224,18 @@ HttpRequest HttpParser::parseRequest(std::string const& rawRequest)
         std::string value = trim(line.substr(colonPos + 1));
         request.headers[key] = value;
     }
+    std::map<std::string, std::string>::iterator te = request.headers.find("transfer-encoding");
+    std::string rawBody = rawRequest.substr(headerEnd + 4);
+    if (te != request.headers.end() && toLowerString(te->second).find("chunked") != std::string::npos)
+        request.isChunked = true;
+    if (request.isChunked)
+    {
+        if (!decodeChunkendBody(rawBody, request.body))
+            throw std::runtime_error("bad chunked body");
+        request.headers.erase("content-length");
+    }
+    else
+        request.body = rawBody;
     if (request.version == "HTTP/1.1"
         && request.headers.find("host") == request.headers.end())
         throw std::runtime_error("Invalid HTTP request: missing Host header");

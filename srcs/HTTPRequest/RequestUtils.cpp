@@ -153,6 +153,18 @@ static bool getErrorPagePathUtil(ServerConfig const& server, int code,
 	return true;
 }
 
+std::string trim(const std::string& str)
+{
+    size_t start = 0;
+    size_t end = str.size();
+
+    while (start < str.size() && (str[start] == ' ' || str[start] == '\t' || str[start] == '\r'))
+        start++;
+    while (end > start && (str[end - 1] == ' ' || str[end - 1] == '\t' || str[end - 1] == '\r'))
+        end--;
+    return str.substr(start, end - start);
+}
+
 std::string resolveRoot(ServerConfig const& server, Location const* location)
 {
 	if (location && !location->root.empty())
