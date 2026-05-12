@@ -83,11 +83,15 @@ void Server::finalizeCgi(int clientFd)
 {
 	CgiManager::checkChild(_clients[clientFd].cgi);
 	CgiResult result = CgiManager::buildFinalResult(_clients[clientFd].cgi);
+	bool wasTimeout = _clients[clientFd].cgi.timedOut;
 	CgiManager::cleanupProcess(_clients[clientFd].cgi);
 	_clients[clientFd].cgiActive = false;
 	if (!result.success)
+	{
+		int errorCode = wasTimeout ? 504 : 500;
 		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(
-			buildErrorResponse(_conf, 500, "cgi failed"));
+			buildErrorResponse(_conf, errorCode, errorCode == 504 ? "cgi timeout" : "cgi failed"));
+	}
 	else
 		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(result.response);
 }
