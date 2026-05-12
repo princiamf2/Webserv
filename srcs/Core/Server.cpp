@@ -88,9 +88,20 @@ void Server::finalizeCgi(int clientFd)
 	_clients[clientFd].cgiActive = false;
 	if (!result.success)
 	{
-		int errorCode = wasTimeout ? 504 : 500;
+		int errorCode;
+		std::string errorMsg;
+		if (wasTimeout)
+		{
+			errorCode = 504;
+			errorMsg = "cgi timeout";
+		}
+		else
+		{
+			errorCode = 500;
+			errorMsg = "cgi failed";
+		}
 		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(
-			buildErrorResponse(_conf, errorCode, errorCode == 504 ? "cgi timeout" : "cgi failed"));
+			buildErrorResponse(_conf, errorCode, errorMsg));
 	}
 	else
 		_clients[clientFd].writeBuf = HttpResponseBuilder::buildResponse(result.response);

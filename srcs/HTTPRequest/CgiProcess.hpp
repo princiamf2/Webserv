@@ -18,7 +18,7 @@ struct CgiProcess
 	bool		childExited;
 	int			exitStatus;
 	bool		error;
-	bool		timedOut; // true uniquement si le CGI a depasse CGI_TIMEOUT
+	bool		timedOut; // true si CGI depasse CGI_TIMEOUT
 	time_t		startTime;
 
 	CgiProcess()
