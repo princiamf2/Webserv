@@ -683,6 +683,13 @@ test_parsing_validation() {
         'server\n{\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n}\n'
 
     run_parser_case "$parser_bin" \
+        "parse: server sans domain_name rejete" \
+        "reject" \
+        "ERROR: SERVER HAS NO DOMAIN_NAME DIR" \
+        "parse_invalid_missing_domain_name.conf" \
+        'server {\n    listen 8080;\n    root ./configs/www;\n    index index.html;\n}\n'
+
+    run_parser_case "$parser_bin" \
         "parse: root et upload_dir absolus acceptes" \
         "accept" \
         "nb de servers: 1" \

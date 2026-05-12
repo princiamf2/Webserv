@@ -355,7 +355,7 @@ bool parseServer(std::istringstream& stream, ServerConfig& server) //parse un se
 		}
 		else
 		{
-			std::cerr << "ERROR: UNKNOWN SERVER DIRECTIVE: " << word_to_parse << std::endl;
+			std::cerr << "ERROR: UNKNOWN SERVER DIR: " << word_to_parse << std::endl;
 			return false;
 		}
 	}
@@ -366,13 +366,18 @@ bool parseServer(std::istringstream& stream, ServerConfig& server) //parse un se
 	}
 	if (server.listen_ports.empty())
 	{
-    	std::cerr << "ERROR: SERVER HAS NO LISTEN DIRECTIVE" << std::endl;
+    	std::cerr << "ERROR: SERVER HAS NO LISTEN DIR" << std::endl;
     	return false;
 	}
 	if (server.root.empty())
 	{
-		std::cerr << "ERROR: SERVER HAS NO ROOT DIRECTIVE" << std::endl;
+		std::cerr << "ERROR: SERVER HAS NO ROOT DI" << std::endl;
 		return false;
 	}
+    if (server.domain_names.empty())
+    {
+        std::cerr << "ERROR: SERVER HAS NO DOMAIN_NAME DIR" << std::endl;
+        return false;
+    }
 	return true;
 }
