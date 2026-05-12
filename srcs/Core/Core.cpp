@@ -70,7 +70,7 @@ void Core::runPoll()
 	stdinPfd.revents = 0;
 	bool quit = 0;
 
-	_pollFds.insert(_pollFds.begin(), stdinPfd);
+	_pollFds.insert(_pollFds.begin(), stdinPfd); //pour le timeout et cmds bash
 	while (true)
 	{
 		if (quit == true)
@@ -86,11 +86,10 @@ void Core::runPoll()
 			if (srv->clientTimedOut(clientFd, now, timeout))
 			{
 				logs("408 timeout fd=" + toString(clientFd));
-				std::string response = HttpResponseBuilder::buildResponse(
+				Client& client = srv->getClients()[clientFd];
+				client.writeBuf = HttpResponseBuilder::buildResponse(
 					buildErrorResponse(srv->getConf(), 408, "request timeout"));
-				send(clientFd, response.c_str(), response.size(), 0);
-
-				toClose.push_back(clientFd);
+				enableClientWrite(clientFd);
 			}
 
 			Client& client = srv->getClients()[clientFd];
@@ -304,13 +303,24 @@ void Core::acceptClient(int listenFd)
 	_fdToServer[listenFd]->addClient(clientFd); // add client in server
 }
 
-void Core::removePollFd(int fd)
-{
+void Core::removePollFd(int fd) 
 	for (size_t i = 0; i < _pollFds.size(); ++i)
 	{
 		if (_pollFds[i].fd == fd)
 		{
 			_pollFds.erase(_pollFds.begin() + i);
+			return ;
+		}
+	}
+}
+
+void Core::enableClientWrite(int fd) // petite boucle pour activer le write d'un client dans poll (pour le timeout ou quand la reponse est prete)
+{
+	for (size_t i = 0; i < _pollFds.size(); ++i)
+	{
+		if (_pollFds[i].fd == fd)
+		{
+			_pollFds[i].events |= POLLOUT;
 			return ;
 		}
 	}
