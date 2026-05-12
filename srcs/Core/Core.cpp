@@ -98,7 +98,7 @@ void Core::runPoll()
 				&& now - client.cgi.startTime > CGI_TIMEOUT)
 			{
 				client.cgi.error = true;
-				client.cgi.timedOut = true; // marque le timeout pour que finalizeCgi renvoie 504
+				client.cgi.timedOut = true; // timeout pour finalizeCgi (504)
 				if (client.cgi.pid > 0 && !client.cgi.childExited)
 					kill(client.cgi.pid, SIGKILL);
 				if (client.cgi.stdinFd != -1)
