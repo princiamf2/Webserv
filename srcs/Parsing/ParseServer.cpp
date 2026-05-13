@@ -47,7 +47,12 @@ bool parseServer_Listen(std::istringstream& lineStream, ServerConfig& server)
 		return false;
 	}
 
+	ListenEntry entry;
+	entry.interface = "0.0.0.0";
+	entry.port = port;
+
 	server.listen_ports.insert(port);
+	server.listen_entries.insert(entry);
 	return true;
 }
 
