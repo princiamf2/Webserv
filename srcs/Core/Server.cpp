@@ -217,7 +217,17 @@ void Server::readClient(int fd, Core *core)
 	char	buf[4096];
 	ssize_t bytes = recv(fd, buf, sizeof(buf), 0);
 
-	if (bytes <= 0) // 0 = deconnexion, -1 = error
+	if (bytes < 0)
+	{
+		logs("recv error fd=" + toString(fd));
+		_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+			buildErrorResponse(_conf, 500, "recv failed"));
+		_clients[fd].waitingBody = false;
+		_clients[fd].readBuf.clear();
+		return ;
+	}
+
+	if (bytes == 0) // 0 = deconnexion
 	{
 		if (_clients[fd].waitingBody)
 		{
@@ -343,10 +353,18 @@ void Server::writeClient(int fd)
 
 	ssize_t bytes = send(fd, _clients[fd].writeBuf.c_str(),
 							 _clients[fd].writeBuf.size(), 0);
-	//send=0 (disconnect), <0 (erreur) -> ferme client
-	if (bytes <= 0)
+	if (bytes == 0)
 	{
-		logs("send failed fd=" + toString(fd));
+		logs("send closed fd=" + toString(fd));
+		_clients[fd].toClose = true;
+		return ;
+	}
+
+	if (bytes < 0)
+	{
+		logs("send error fd=" + toString(fd));
+		_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+			buildErrorResponse(_conf, 500, "send failed"));
 		_clients[fd].toClose = true;
 		return ;
 	}
@@ -447,6 +465,5 @@ void Server::debug()
 	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
 		std::cout << "	fd=" << it->first << std::endl;
 }
-
 
 
