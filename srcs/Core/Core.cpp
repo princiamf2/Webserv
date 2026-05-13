@@ -132,8 +132,7 @@ void Core::runPoll()
 		}
 		if (ret == 0)
 			continue;
-		size_t size = _pollFds.size();
-		for (size_t i = 0; i < size; i++)
+		for (size_t i = 0; i <  _pollFds.size(); i++)
 		{
 			if (i == 0 && (_pollFds[i].revents & POLLIN))
 			{
@@ -155,7 +154,6 @@ void Core::runPoll()
 						_fdClientToServer[clientFd]->finalizeCgi(clientFd);
 						_cgiReadFdToClient.erase(fd);
 						_pollFds.erase(_pollFds.begin() + i);
-						size--;
 						i--;
 					}
 				}
@@ -166,7 +164,6 @@ void Core::runPoll()
 				}
 				else
 					closeClient(fd);
-				size--;
 				i--;
 				continue;
 			}
@@ -179,12 +176,8 @@ void Core::runPoll()
 			if (_fdClientToServer.count(fd)) // a client is actif
 			{
 				if (_pollFds[i].revents & POLLIN)
-				{
 					_fdClientToServer[fd]->readClient(fd, this);
-					// Client &clt = _fdClientToServer[fd]->getClients()[fd];
-					// if (clt.cgiActive)
-					// 	registerCgi(clt.fd, clt.cgi.stdinFd, clt.cgi.stdoutFd);
-				}
+
 				if (_fdClientToServer.count(fd) && (_pollFds[i].revents & POLLOUT))
 					_fdClientToServer[fd]->writeClient(fd);
 			}
@@ -198,7 +191,6 @@ void Core::runPoll()
 			if (_fdClientToServer.count(fd) && _fdClientToServer[fd]->clientToClose(fd))
 			{
 				closeClient(fd);
-				size--;
 				i--;
 				continue;
 			}
@@ -213,7 +205,6 @@ void Core::runPoll()
 					_fdClientToServer[clientFd]->finalizeCgi(clientFd);
 					_cgiWriteFdToClient.erase(fd);
 					_pollFds.erase(_pollFds.begin() + i);
-					size--;
 					i--;
 					continue;
 				}
@@ -223,7 +214,6 @@ void Core::runPoll()
 				{
 					_cgiWriteFdToClient.erase(fd);
 					_pollFds.erase(_pollFds.begin() + i);
-					size--;
 					i--;
 				}
 			}
@@ -237,7 +227,6 @@ void Core::runPoll()
 					_fdClientToServer[clientFd]->finalizeCgi(clientFd);
 					_cgiReadFdToClient.erase(fd);
 					_pollFds.erase(_pollFds.begin() + i);
-					size--;
 					i--;
 					continue;
 				}
@@ -254,7 +243,6 @@ void Core::runPoll()
 					_fdClientToServer[clientFd]->finalizeCgi(clientFd);
 					_cgiReadFdToClient.erase(fd);
 					_pollFds.erase(_pollFds.begin() + i);
-					size--;
 					i--;
 					continue;
 				}
@@ -264,7 +252,6 @@ void Core::runPoll()
 					_fdClientToServer[clientFd]->finalizeCgi(clientFd);
 					_cgiReadFdToClient.erase(fd);
 					_pollFds.erase(_pollFds.begin() + i);
-					size--;
 					i--;
 					continue;
 				}

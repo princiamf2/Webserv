@@ -6,7 +6,7 @@
 /*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/05/13 00:37:46 by michel           ###   ########.fr       */
+/*   Updated: 2026/05/13 13:21:48 by malapoug         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -52,6 +52,7 @@ static std::string getReasonPhrase(int code)
 		case 413: return "Payload Too Large";
 		case 500: return "Internal Server Error";
 		case 501: return "Not Implemented";
+		case 504: return "Gateway Timeout";
 		case 505: return "HTTP Version Not Supported";
 		default: return "Internal Server Error";
 	}
