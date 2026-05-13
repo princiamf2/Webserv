@@ -6,7 +6,7 @@
 /*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/05/13 13:21:48 by malapoug         ###   ########.fr       */
+/*   Updated: 2026/05/13 18:33:58 by michel           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -392,7 +392,11 @@ bool CgiManager::startProcess(CgiProcess& process,
 		if (chdir(scriptDir.c_str()) == -1)
 			std::exit(1);
 
-		envp = buildCgiEnv(request, server, location, scriptPath, scriptName, pathInfo);
+		std::string cgiScriptFilename = scriptPath;
+		if (!interpreter.empty())
+			cgiScriptFilename = "./" + executableName;
+		
+		envp = buildCgiEnv(request, server, location, cgiScriptFilename, scriptName, pathInfo);
 
 		if (!interpreter.empty())
 		{
@@ -406,6 +410,7 @@ bool CgiManager::startProcess(CgiProcess& process,
 			argv[1] = NULL;
 			argv[2] = NULL;
 		}
+		
 		execve(argv[0], argv, envp);
 		freeCgiEnv(envp);
 		std::exit(1);
