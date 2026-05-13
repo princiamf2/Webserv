@@ -54,6 +54,7 @@ class Server
 		ServerConfig                _conf;                                                    // base config (principally for http)
 		std::string                 _host;                                                    // like "0.0.0.0"
 		std::set<unsigned int>      _ports;                                                   // like 8080
+		std::set<ListenEntry>       _listenEntries;                                           // like 127.0.0.1:8080
 		std::set<std::string>       _domainNames;                                             // like hello.ch
 		std::string                 _root;                                                    // like ~/Webserv/srcs/
 		std::string                 _index;                                                   // like ~/Webserv/srcs/index.html

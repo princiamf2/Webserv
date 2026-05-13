@@ -16,6 +16,7 @@ Server::Server(ServerConfig serv)
 	_conf = serv;                                    // parsing configuration keeped
 	_host = "127.0.0.1";                             // host
 	_ports = serv.listen_ports;                      // listen ports
+	_listenEntries = serv.listen_entries;            // listen interfaces + ports
 	_domainNames = serv.domain_names;                // domain name
 	_root = serv.root;                               // root directory path
 	_index = serv.index;                             // index file by default
@@ -31,6 +32,7 @@ Server::Server(const Server& other)
 	: _conf(other._conf),
 	_host(other._host),
 	_ports(other._ports),
+	_listenEntries(other._listenEntries),
 	_domainNames(other._domainNames),
 	_root(other._root),
 	_index(other._index),
@@ -49,6 +51,7 @@ Server& Server::operator=(const Server& other)
 	_conf = other._conf;
 	_host = other._host;
 	_ports = other._ports;
+	_listenEntries = other._listenEntries;
 	_domainNames = other._domainNames;
 	_root = other._root;
 	_index = other._index;
@@ -63,7 +66,7 @@ Server& Server::operator=(const Server& other)
 
 int Server::init(void)
 {
-	for (std::set<unsigned int>::iterator it = _ports.begin(); it != _ports.end(); ++it)
+	for (std::set<ListenEntry>::iterator it = _listenEntries.begin(); it != _listenEntries.end(); ++it)
 	{
 		int fd = socket(AF_INET, SOCK_STREAM, 0);
 		if (fd == -1)
@@ -75,8 +78,10 @@ int Server::init(void)
 		struct sockaddr_in addr;
 		memset(&addr, 0, sizeof(addr));
 		addr.sin_family = AF_INET;
-		addr.sin_port = htons(*it);
-		addr.sin_addr.s_addr = INADDR_ANY;
+		addr.sin_port = htons(it->port);
+		addr.sin_addr.s_addr = inet_addr(it->interface.c_str());
+		if (addr.sin_addr.s_addr == INADDR_NONE)
+			return (error("Invalid listen interface"));
 
 		if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
 			return (error("Bind returned -1"));
@@ -465,5 +470,3 @@ void Server::debug()
 	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
 		std::cout << "	fd=" << it->first << std::endl;
 }
-
-
