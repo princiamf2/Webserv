@@ -5,6 +5,7 @@
 bool parseServer_Listen(std::istringstream& lineStream, ServerConfig& server)
 {
 	std::string port_str;
+	std::string interface_str = "0.0.0.0";
 	lineStream >> port_str;
 
 	if (port_str.empty())
@@ -16,6 +17,18 @@ bool parseServer_Listen(std::istringstream& lineStream, ServerConfig& server)
 	{
 		std::cerr << "ERROR: WRONG LISTEN SYNTAX" << std::endl;
 		return false;
+	}
+
+	size_t colon = port_str.find(':');
+	if (colon != std::string::npos)
+	{
+		if (colon == 0 || colon == port_str.size() - 1 || port_str.find(':', colon + 1) != std::string::npos)
+		{
+			std::cerr << "ERROR: WRONG LISTEN SYNTAX" << std::endl;
+			return false;
+		}
+		interface_str = port_str.substr(0, colon);
+		port_str = port_str.substr(colon + 1);
 	}
 
 	std::istringstream in_string_stream(port_str);
@@ -48,7 +61,7 @@ bool parseServer_Listen(std::istringstream& lineStream, ServerConfig& server)
 	}
 
 	ListenEntry entry;
-	entry.interface = "0.0.0.0";
+	entry.interface = interface_str;
 	entry.port = port;
 
 	server.listen_ports.insert(port);

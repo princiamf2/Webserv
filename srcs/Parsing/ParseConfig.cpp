@@ -62,12 +62,19 @@ static bool hasListenConflict(const std::vector<ServerConfig>& serverlist, const
 {
     for (size_t i = 0; i < serverlist.size(); ++i)
     {
-        for (std::set<unsigned int>::const_iterator iter = candidate.listen_ports.begin(); iter != candidate.listen_ports.end(); ++iter)
+        for (std::set<ListenEntry>::const_iterator iter = candidate.listen_entries.begin(); iter != candidate.listen_entries.end(); ++iter)
         {
-            if (serverlist[i].listen_ports.count(*iter))
+            for (std::set<ListenEntry>::const_iterator other = serverlist[i].listen_entries.begin(); other != serverlist[i].listen_entries.end(); ++other)
             {
-                std::cerr << "Error -> multiple servers for same port " << *iter << std::endl;
-                return true;
+                if (iter->port == other->port
+                    && (iter->interface == other->interface
+                        || iter->interface == "0.0.0.0"
+                        || other->interface == "0.0.0.0"))
+                {
+                    std::cerr << "Error -> multiple servers for same interface:port "
+                        << iter->interface << ":" << iter->port << std::endl;
+                    return true;
+                }
             }
         }
     }
