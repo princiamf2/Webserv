@@ -19,6 +19,7 @@ NOTE=0
 
 KEEP_SERVER=0
 KILL_EXISTING_WEBSERV=0
+RUN_SIEGE=0
 CURRENT_SERVER_PID=""
 CURRENT_SERVER_LOG=""
 CURRENT_SERVER_PORTS=""
@@ -371,9 +372,10 @@ check_body_contains() {
     local label="$1"
     local url="$2"
     local needle="$3"
+    shift 3
     local body
 
-    body="$(http_body "$url" 2>/dev/null || true)"
+    body="$(http_body "$url" "$@" 2>/dev/null || true)"
     if printf "%s" "$body" | grep -Fq "$needle"; then
         pass "$label"
     else
@@ -413,6 +415,28 @@ run_parser_case() {
         pass "$label"
     else
         fail "$label -> rejet attendu (motif absent: $expected)"
+        log "--- PARSER OUTPUT $rel_cfg ---"
+        printf "%s\n" "$output" | sed -n '1,80p' >> "$RESULT_FILE"
+        log "--- FIN PARSER OUTPUT ---"
+    fi
+}
+
+run_parser_todo_accept_case() {
+    local parser_bin="$1"
+    local label="$2"
+    local expected="$3"
+    local rel_cfg="$4"
+    local content="$5"
+    local cfg_path="$TMP_DIR/$rel_cfg"
+    local output
+
+    printf "%b" "$content" > "$cfg_path"
+    output="$("$parser_bin" "$cfg_path" 2>&1 || true)"
+
+    if printf "%s" "$output" | grep -Fq "$expected"; then
+        pass "$label"
+    else
+        note "TODO: $label pas encore accepte"
         log "--- PARSER OUTPUT $rel_cfg ---"
         printf "%s\n" "$output" | sed -n '1,80p' >> "$RESULT_FILE"
         log "--- FIN PARSER OUTPUT ---"
@@ -474,6 +498,40 @@ check_raw_status() {
     else
         fail "$label -> attendu=$expected recu=$got"
     fi
+}
+
+progressive_chunked_status() {
+    local port="$1"
+    local path="$2"
+    local first_chunk="$3"
+    local second_chunk="$4"
+    local limit="${5:-8}"
+    local line
+
+    line="$(timeout "$limit" bash -c '
+        exec 3<>/dev/tcp/127.0.0.1/"$1" || exit 111
+        printf "POST %s HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n" "$2" >&3
+        printf "%s\r\n%s\r\n" "${#3}" "$3" >&3
+        sleep 1
+        printf "%s\r\n%s\r\n0\r\n\r\n" "${#4}" "$4" >&3
+        cat <&3
+    ' _ "$port" "$path" "$first_chunk" "$second_chunk" 2>/dev/null | tr -d '\r' | awk 'NR==1{print; exit}')"
+    printf "%s" "$line" | awk '{print $2}'
+}
+
+incomplete_chunked_status() {
+    local port="$1"
+    local path="$2"
+    local limit="${3:-12}"
+    local line
+
+    line="$(timeout "$limit" bash -c '
+        exec 3<>/dev/tcp/127.0.0.1/"$1" || exit 111
+        printf "POST %s HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nabc" "$2" >&3
+        sleep 9
+        cat <&3
+    ' _ "$port" "$path" 2>/dev/null | tr -d '\r' | awk 'NR==1{print; exit}')"
+    printf "%s" "$line" | awk '{print $2}'
 }
 
 run_telnet_get() {
@@ -545,22 +603,56 @@ test_code_checks() {
     section "CODE CHECKS"
 
     local poll_count
+    local poll_hits
+    local alt_event_mech
+    local accept_count
     local errno_bad
     local eagain_count
 
-    poll_count="$(grep -R -n --include='*.cpp' --include='*.hpp' 'poll[[:space:]]*(' srcs 2>/dev/null | wc -l | tr -d ' ')"
+    alt_event_mech="$(grep -R -n --include='*.cpp' --include='*.hpp' -E '(^|[^A-Za-z0-9_])(select|epoll_wait|kqueue|kevent)[[:space:]]*\(' srcs 2>/dev/null || true)"
+    if [[ -z "$alt_event_mech" ]]; then
+        pass "Aucun select/epoll/kqueue/kevent dans srcs"
+    else
+        fail "Mecanismes d'evenement concurrents detectes"
+        printf "%s\n" "$alt_event_mech" >> "$RESULT_FILE"
+    fi
+
+    poll_hits="$(find srcs -type f \( -name '*.cpp' -o -name '*.hpp' \) -exec awk '
+        {
+            code = $0
+            sub(/\/\/.*/, "", code)
+            if (code ~ /(^|[^A-Za-z0-9_])poll[[:space:]]*\(/)
+                print FILENAME ":" FNR ":" $0
+        }
+    ' {} + 2>/dev/null || true)"
+    poll_count="$(printf "%s\n" "$poll_hits" | sed '/^$/d' | wc -l | tr -d ' ')"
     if [[ "$poll_count" == "1" ]]; then
         pass "Un seul poll() dans srcs"
     else
         fail "Nombre de poll() attendu=1 recu=$poll_count"
+        log "--- POLL HITS ---"
+        printf "%s\n" "$poll_hits" >> "$RESULT_FILE"
+        log "--- FIN POLL HITS ---"
     fi
 
     grep -q 'POLLIN' srcs/Core/Core.cpp && pass "POLLIN present dans la boucle principale" || fail "POLLIN absent dans Core.cpp"
     grep -q 'POLLOUT' srcs/Core/Core.cpp && pass "POLLOUT present dans la boucle principale" || fail "POLLOUT absent dans Core.cpp"
     grep -q 'revents' srcs/Core/Core.cpp && pass "revents utilise dans Core.cpp" || fail "revents absent dans Core.cpp"
+    grep -Eq 'revents.*POLLIN|POLLIN.*revents' srcs/Core/Core.cpp && grep -q 'acceptClient' srcs/Core/Core.cpp && pass "acceptClient appele depuis readiness POLLIN" || fail "acceptClient ne semble pas appele depuis POLLIN"
+    grep -Eq 'revents.*POLLIN|POLLIN.*revents' srcs/Core/Core.cpp && grep -q 'readClient' srcs/Core/Core.cpp && pass "readClient appele depuis readiness POLLIN" || fail "readClient ne semble pas appele depuis POLLIN"
+    grep -Eq 'revents.*POLLOUT|POLLOUT.*revents' srcs/Core/Core.cpp && grep -q 'writeClient' srcs/Core/Core.cpp && pass "writeClient appele depuis readiness POLLOUT" || fail "writeClient ne semble pas appele depuis POLLOUT"
+
+    accept_count="$(grep -R -n --include='*.cpp' --include='*.hpp' '\baccept[[:space:]]*(' srcs 2>/dev/null | wc -l | tr -d ' ')"
+    if [[ "$accept_count" == "1" ]]; then
+        pass "Un seul accept() dans srcs"
+    else
+        fail "Nombre de accept() attendu=1 recu=$accept_count"
+    fi
 
     grep -A5 'recv(' srcs/Core/Server.cpp | grep -Eq '<= *0|== *0|< *0' && pass "recv() gere 0 et/ou -1" || fail "recv() ne montre pas clairement la gestion de 0/-1"
     grep -A8 'send(' srcs/Core/Server.cpp | grep -Eq '<= *0|== *0|< *0' && pass "send() gere 0 et/ou -1" || fail "send() ne montre pas clairement la gestion de 0/-1"
+    grep -A12 'recv(' srcs/Core/Server.cpp | grep -Eq '500|Internal Server Error|buildErrorResponse' && pass "recv() -1 semble mener a une reponse 500" || note "TODO: recv() -1 ne montre pas clairement une reponse 500"
+    grep -A16 'send(' srcs/Core/Server.cpp | grep -Eq '500|Internal Server Error|buildErrorResponse' && pass "send() -1 semble mener a une reponse 500" || note "TODO: send() -1 ne montre pas clairement une reponse 500"
 
     eagain_count="$(grep -R -n 'EAGAIN\|EWOULDBLOCK' srcs 2>/dev/null | wc -l | tr -d ' ')"
     if [[ "$eagain_count" == "0" ]]; then
@@ -578,6 +670,8 @@ test_code_checks() {
     fi
 
     grep -q 'chdir' srcs/HTTPRequest/CgiManager.cpp && pass "CGI change de dossier via chdir()" || fail "chdir() absent de CgiManager.cpp"
+    grep -q 'CgiManager::writeInput' srcs/Core/Core.cpp && grep -Eq 'POLLOUT' srcs/Core/Core.cpp && pass "CGI stdin ecrit via POLLOUT" || fail "CGI stdin ne semble pas ecrit via POLLOUT"
+    grep -q 'CgiManager::readOutput' srcs/Core/Core.cpp && grep -Eq 'POLLIN|POLLHUP' srcs/Core/Core.cpp && pass "CGI stdout lu via POLLIN/POLLHUP" || fail "CGI stdout ne semble pas lu via POLLIN/POLLHUP"
 }
 
 test_parsing_validation() {
@@ -682,6 +776,32 @@ test_parsing_validation() {
         "parse_valid_server_header_split.conf" \
         'server\n{\n    listen 8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n}\n'
 
+    run_parser_todo_accept_case "$parser_bin" \
+        "parse: listen 127.0.0.1:8080 accepte" \
+        "nb de servers: 1" \
+        "parse_valid_listen_ipv4_port.conf" \
+        'server {\n    listen 127.0.0.1:8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 1000;\n}\n'
+
+    run_parser_todo_accept_case "$parser_bin" \
+        "parse: listen localhost:8080 accepte" \
+        "nb de servers: 1" \
+        "parse_valid_listen_host_port.conf" \
+        'server {\n    listen localhost:8080;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 1000;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: listen interface sans port rejete" \
+        "reject" \
+        "ERROR" \
+        "parse_invalid_listen_interface_without_port.conf" \
+        'server {\n    listen 127.0.0.1;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 1000;\n}\n'
+
+    run_parser_case "$parser_bin" \
+        "parse: listen interface:port invalide rejete" \
+        "reject" \
+        "ERROR" \
+        "parse_invalid_listen_interface_bad_port.conf" \
+        'server {\n    listen 127.0.0.1:abc;\n    domain_name localhost;\n    root ./configs/www;\n    index index.html;\n    client_max_body_size 1000;\n}\n'
+
     run_parser_case "$parser_bin" \
         "parse: server sans domain_name rejete" \
         "reject" \
@@ -714,6 +834,8 @@ test_core_runtime() {
     check_code "GET /" 200 "http://127.0.0.1:8080/"
     check_code "GET /script.js" 200 "http://127.0.0.1:8080/script.js"
     check_code "GET /assets/styles.css" 200 "http://127.0.0.1:8080/assets/styles.css"
+    check_code "GET /images/logo.png" 200 "http://127.0.0.1:8080/images/logo.png"
+    check_code "GET /favicon.ico" 200 "http://127.0.0.1:8080/favicon.ico"
     check_code "GET /browse/" 200 "http://127.0.0.1:8080/browse/"
     check_body_contains "Listing /browse/ contient a.txt" "http://127.0.0.1:8080/browse/" "a.txt"
     check_body_contains "Listing /browse/ contient b.txt" "http://127.0.0.1:8080/browse/" "b.txt"
@@ -735,10 +857,60 @@ test_core_runtime() {
     check_body_contains "Contenu du fichier upload correct" "http://127.0.0.1:8080/upload/eval_test.txt" "hello eval"
     check_code "DELETE fichier upload -> 204" 204 -X DELETE "http://127.0.0.1:8080/upload/eval_test.txt"
 
+    local chunked_progress_code
+    chunked_progress_code="$(progressive_chunked_status 8080 "/upload/chunked_progressive_eval.txt" "hello" "world" 8)"
+    if [[ "$chunked_progress_code" == "201" ]]; then
+        pass "Chunked progressif en deux recv -> 201"
+        check_body_contains "Chunked progressif contenu assemble" "http://127.0.0.1:8080/upload/chunked_progressive_eval.txt" "helloworld"
+        check_code "DELETE fichier chunked progressif -> 204" 204 -X DELETE "http://127.0.0.1:8080/upload/chunked_progressive_eval.txt"
+    else
+        note "TODO: Chunked progressif en deux recv -> attendu=201 recu=$chunked_progress_code"
+    fi
+
+    local chunked_incomplete_code
+    chunked_incomplete_code="$(incomplete_chunked_status 8080 "/upload/chunked_incomplete_eval.txt" 12)"
+    if [[ "$chunked_incomplete_code" == "400" || "$chunked_incomplete_code" == "408" ]]; then
+        pass "Chunked incomplet ferme avec erreur -> $chunked_incomplete_code"
+    else
+        fail "Chunked incomplet -> attendu=400/408 recu=$chunked_incomplete_code"
+    fi
+    rm -f "$ROOT_DIR/configs/www/upload/chunked_progressive_eval.txt" "$ROOT_DIR/configs/www/upload/chunked_incomplete_eval.txt" 2>/dev/null || true
+
+    local unreadable_file unreadable_code
+    unreadable_file="$ROOT_DIR/configs/www/unreadable_eval.txt"
+    printf "unreadable eval\n" > "$unreadable_file"
+    if chmod 000 "$unreadable_file" 2>/dev/null; then
+        unreadable_code="$(http_code "http://127.0.0.1:8080/unreadable_eval.txt" 2>/dev/null || true)"
+        if [[ "$unreadable_code" == "500" ]]; then
+            pass "Erreur read fichier -> 500"
+        else
+            note "TODO: Erreur read fichier -> attendu=500 recu=$unreadable_code"
+        fi
+        chmod 644 "$unreadable_file" 2>/dev/null || true
+    else
+        skip "Erreur read fichier -> chmod 000 impossible"
+    fi
+    rm -f "$unreadable_file" 2>/dev/null || true
+
     backup_file "configs/www/errors/404.html"
     write_file "configs/www/errors/404.html" '<html><body>EVAL_404_MARKER</body></html>\n'
     check_body_contains "404 custom page verifiee apres modification" "http://127.0.0.1:8080/missing-page" "EVAL_404_MARKER"
     restore_file "configs/www/errors/404.html"
+
+    backup_file "configs/www/errors/403.html"
+    write_file "configs/www/errors/403.html" '<html><body>EVAL_403_MARKER</body></html>\n'
+    check_body_contains "403 custom page verifiee apres modification" "http://127.0.0.1:8080/noindex/" "EVAL_403_MARKER"
+    restore_file "configs/www/errors/403.html"
+
+    backup_file "configs/www/errors/405.html"
+    write_file "configs/www/errors/405.html" '<html><body>EVAL_405_MARKER</body></html>\n'
+    check_body_contains "405 custom page verifiee apres modification" "http://127.0.0.1:8080/readonly/index.html" "EVAL_405_MARKER" -X DELETE
+    restore_file "configs/www/errors/405.html"
+
+    backup_file "configs/www/errors/501.html"
+    write_file "configs/www/errors/501.html" '<html><body>EVAL_501_MARKER</body></html>\n'
+    check_body_contains "501 custom page verifiee apres modification" "http://127.0.0.1:8080/" "EVAL_501_MARKER" -X UNKNOWN
+    restore_file "configs/www/errors/501.html"
 
     backup_file "configs/www/docs/index.html"
     write_file "configs/www/docs/index.html" '<html><body>EVAL_DOCS_INDEX_MARKER</body></html>\n'
@@ -763,6 +935,42 @@ test_core_runtime() {
         log "--- CGI POST BODY ---"
         printf "%s\n" "$post_body" >> "$RESULT_FILE"
         log "--- FIN CGI POST BODY ---"
+    fi
+
+    backup_file "configs/www/cgi-bin/test.py"
+    printf "relative-cgi-ok\n" > "$ROOT_DIR/configs/www/cgi-bin/relative_eval.txt"
+    write_file "configs/www/cgi-bin/test.py" '#!/usr/bin/env python3\nwith open("relative_eval.txt", "r") as f:\n    data = f.read().strip()\nprint("Content-Type: text/plain")\nprint()\nprint("RELATIVE_FILE=" + data)\n'
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+    check_body_contains "CGI execute dans son dossier (fichier relatif)" "http://127.0.0.1:8080/cgi-bin/test.py" "RELATIVE_FILE=relative-cgi-ok"
+    restore_file "configs/www/cgi-bin/test.py"
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+    rm -f "$ROOT_DIR/configs/www/cgi-bin/relative_eval.txt" 2>/dev/null || true
+
+    backup_file "configs/www/cgi-bin/test.py"
+    write_file "configs/www/cgi-bin/test.py" '#!/usr/bin/env python3\nimport os, sys\nbody = sys.stdin.read()\nprint("Content-Type: text/plain")\nprint()\nprint("HTTP_HOST=" + os.environ.get("HTTP_HOST", ""))\nprint("CONTENT_TYPE=" + os.environ.get("CONTENT_TYPE", ""))\nprint("CONTENT_LENGTH=" + os.environ.get("CONTENT_LENGTH", ""))\nprint("BODY=" + body)\n'
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+    local cgi_env_body
+    cgi_env_body="$(curl -s --max-time 8 -X POST -H 'Content-Type: text/plain' --data 'headers_eval' 'http://127.0.0.1:8080/cgi-bin/test.py' 2>/dev/null || true)"
+    if printf "%s" "$cgi_env_body" | grep -Fq "HTTP_HOST=127.0.0.1:8080" \
+        && printf "%s" "$cgi_env_body" | grep -Fq "CONTENT_TYPE=text/plain" \
+        && printf "%s" "$cgi_env_body" | grep -Fq "CONTENT_LENGTH=12" \
+        && printf "%s" "$cgi_env_body" | grep -Fq "BODY=headers_eval"; then
+        pass "CGI recoit headers/body via environnement"
+    else
+        fail "CGI ne recoit pas correctement headers/body via environnement"
+        log "--- CGI ENV BODY ---"
+        printf "%s\n" "$cgi_env_body" >> "$RESULT_FILE"
+        log "--- FIN CGI ENV BODY ---"
+    fi
+    restore_file "configs/www/cgi-bin/test.py"
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+
+    local cookie_headers
+    cookie_headers="$(http_head 'http://127.0.0.1:8080/' 2>/dev/null || true)"
+    if printf "%s" "$cookie_headers" | grep -qi '^set-cookie:'; then
+        pass "Bonus cookies/sessions: Set-Cookie present"
+    else
+        note "Bonus cookies/sessions: aucun Set-Cookie observe sur GET /"
     fi
 
     backup_file "configs/www/cgi-bin/test.py"
@@ -1051,6 +1259,65 @@ test_multi_config() {
     rm -f "$ROOT_DIR/configs/www/upload/multi_eval.txt" 2>/dev/null || true
 }
 
+test_interface_port_config() {
+    section "INTERFACE:PORT CONFIG"
+
+    local iface_conf="$TMP_DIR/interface_port.config"
+    local iface_log="$TMP_DIR/interface_port.log"
+    local iface_pid
+    cat > "$iface_conf" <<'EOF'
+server {
+    listen 127.0.0.1:8090;
+    domain_name localhost;
+    root ./configs/www;
+    index index.html;
+    client_max_body_size 1000000;
+    location /upload/ {
+        root ./configs/www/upload;
+        upload_dir ./configs/www/upload;
+        methods GET POST DELETE;
+    }
+}
+EOF
+
+    kill_existing_webserv_on_ports "8090" || true
+    sleep 1
+    if ports_busy "8090"; then
+        skip "Config listen 127.0.0.1:8090 impossible: port deja occupe"
+        ports_busy_details "8090" || true
+        return 1
+    fi
+
+    ./webserv "$iface_conf" < <(tail -f /dev/null) > "$iface_log" 2>&1 &
+    iface_pid=$!
+    sleep 1
+
+    if ! kill -0 "$iface_pid" 2>/dev/null; then
+        if grep -q 'WRONG PORT NUMBER' "$iface_log" 2>/dev/null; then
+            note "TODO: listen 127.0.0.1:8090 pas encore supporte par la config"
+        else
+            fail "Demarrage de ./webserv $iface_conf impossible: processus termine juste apres lancement"
+        fi
+        log "--- LOG $iface_conf ---"
+        sed -n '1,60p' "$iface_log" >> "$RESULT_FILE"
+        log "--- FIN LOG ---"
+        return 1
+    fi
+
+    CURRENT_SERVER_PID="$iface_pid"
+    CURRENT_SERVER_LOG="$iface_log"
+    CURRENT_SERVER_PORTS="8090"
+    printf "%s\n" "$CURRENT_SERVER_PID" > "$PID_FILE"
+
+    wait_http "http://127.0.0.1:8090/" || { fail "Config listen 127.0.0.1:8090 ne repond pas"; return 1; }
+
+    check_code "listen 127.0.0.1:8090 GET / -> 200" 200 "http://127.0.0.1:8090/"
+    check_code "listen 127.0.0.1:8090 POST upload -> 201" 201 -X POST --data "iface_port" "http://127.0.0.1:8090/upload/iface_port_eval.txt"
+    check_body_contains "listen 127.0.0.1:8090 upload lisible" "http://127.0.0.1:8090/upload/iface_port_eval.txt" "iface_port"
+    check_code "listen 127.0.0.1:8090 DELETE upload -> 204" 204 -X DELETE "http://127.0.0.1:8090/upload/iface_port_eval.txt"
+    rm -f "$ROOT_DIR/configs/www/upload/iface_port_eval.txt" 2>/dev/null || true
+}
+
 test_port_conflicts() {
     section "PORT CONFLICTS"
 
@@ -1319,15 +1586,20 @@ main() {
                 KILL_EXISTING_WEBSERV=1
                 note "Option --kill-existing-webserv activee: les webserv deja a l'ecoute sur les ports testes seront termines"
                 ;;
+            --with-siege)
+                RUN_SIEGE=1
+                note "Option --with-siege activee: les tests de charge siege seront executes"
+                ;;
             --help|-h)
-                echo "Usage: ./eval_test.sh [--keep-server] [--kill-existing-webserv]"
+                echo "Usage: ./eval_test.sh [--keep-server] [--kill-existing-webserv] [--with-siege]"
                 echo "  --keep-server            garde le dernier serveur lance vivant"
                 echo "  --kill-existing-webserv  termine les processus 'webserv' deja a l'ecoute sur 8080/8081/8082 avant les tests"
+                echo "  --with-siege             execute les tests de charge siege optionnels"
                 exit 0
                 ;;
             *)
                 echo "Option inconnue: $1"
-                echo "Usage: ./eval_test.sh [--keep-server] [--kill-existing-webserv]"
+                echo "Usage: ./eval_test.sh [--keep-server] [--kill-existing-webserv] [--with-siege]"
                 exit 2
                 ;;
         esac
@@ -1351,9 +1623,15 @@ main() {
     stop_server
     test_multi_config
     stop_server
+    test_interface_port_config
+    stop_server
     test_port_conflicts
     stop_server
-    #test_siege
+    if [[ $RUN_SIEGE -eq 1 ]]; then
+        test_siege
+    else
+        note "Siege non execute par defaut (utiliser --with-siege)"
+    fi
     stop_server
     test_valgrind_best_effort
 
