@@ -425,6 +425,11 @@ void Server::debug()
 		std::cout << *it << " ";
 	std::cout << std::endl;
 
+	std::cout << "  listenEntries	: ";
+	for (std::set<ListenEntry>::iterator it = _listenEntries.begin(); it != _listenEntries.end(); ++it)
+		std::cout << it->interface << ":" << it->port << " ";
+	std::cout << std::endl;
+
 	std::cout << "  domainNames	  : ";
 	for (std::set<std::string>::iterator it = _domainNames.begin(); it != _domainNames.end(); ++it)
 		std::cout << *it << " ";
