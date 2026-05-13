@@ -2,6 +2,14 @@
 #include "Core.hpp"
 #include "webserv.hpp"
 #include <cctype>
+#include <string>
+
+enum ChunkedState
+{
+	CHUNKED_INCOMPLETE,
+	CHUNKED_COMPLETE,
+	CHUNKED_INVALID
+};
 
 Server::Server(ServerConfig serv)
 {
@@ -155,6 +163,55 @@ static std::string toLowerString(std::string s)
 	return s;
 }
 
+static bool isChunkedRequest(std::string const& headersLower)
+{
+	return (headersLower.find("transfer-encoding:") != std::string::npos
+		&& headersLower.find("chunked") != std::string::npos);
+}
+
+static ChunkedState getChunkedState(std::string const& buffer, size_t bodyStart)
+{
+	size_t pos = bodyStart;
+
+	while (true)
+	{
+		size_t lineEnd = buffer.find("\r\n", pos);
+		if (lineEnd == std::string::npos)
+			return CHUNKED_INCOMPLETE;
+
+		std::string sizeLine = buffer.substr(pos, lineEnd - pos);
+		size_t semi = sizeLine.find(';');
+		if (semi != std::string::npos)
+			sizeLine = sizeLine.substr(0, semi);
+
+		size_t chunkSize = 0;
+		std::istringstream iss(sizeLine);
+		iss >> std::hex >> chunkSize;
+		if (iss.fail())
+			return CHUNKED_INVALID;
+
+		pos = lineEnd + 2;
+
+		if (chunkSize == 0)
+		{
+			size_t trailerEnd = buffer.find("\r\n\r\n", pos);
+			if (trailerEnd != std::string::npos)
+				return CHUNKED_COMPLETE;
+			return CHUNKED_INCOMPLETE;
+		}
+
+		if (buffer.size() < pos + chunkSize + 2)
+			return CHUNKED_INCOMPLETE;
+
+		pos += chunkSize;
+
+		if (buffer.substr(pos, 2) != "\r\n")
+			return CHUNKED_INVALID;
+
+		pos += 2;
+	}
+}
+
 void Server::readClient(int fd, Core *core)
 {
 	char	buf[4096];
@@ -187,6 +244,29 @@ void Server::readClient(int fd, Core *core)
 	std::string headersPart = _clients[fd].readBuf.substr(0, headerEnd);
 	std::string headersLower = toLowerString(headersPart);
 	size_t clPos = headersLower.find("content-length:");
+
+	if (isChunkedRequest(headersLower))
+	{
+		size_t bodyStart = headerEnd + 4;
+		ChunkedState state = getChunkedState(_clients[fd].readBuf, bodyStart);
+
+		if (state == CHUNKED_INCOMPLETE)
+		{
+			logs("waiting chunked body fd=" + toString(fd));
+			_clients[fd].waitingBody = true;
+			return ;
+		}
+		if (state == CHUNKED_INVALID)
+		{
+			logs("invalid chunked body fd=" + toString(fd));
+			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+				buildErrorResponse(_conf, 400, "invalid chunked body"));
+			_clients[fd].waitingBody = false;
+			_clients[fd].readBuf.clear();
+			return ;
+		}
+		_clients[fd].waitingBody = false;
+	}
 
 	if (clPos != std::string::npos && clPos < headerEnd)
 	{

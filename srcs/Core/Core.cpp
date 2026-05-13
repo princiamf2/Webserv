@@ -81,18 +81,23 @@ void Core::runPoll()
 		{
 			int clientFd = it->first;
 			Server* srv = it->second;
+			Client& client = srv->getClients()[clientFd];
 
-			int timeout = srv->clientWaitingBody(clientFd) ? BODYTO : TIMEOUT;
-			if (srv->clientTimedOut(clientFd, now, timeout))
+			if (!client.cgiActive)
 			{
-				logs("408 timeout fd=" + toString(clientFd));
-				Client& client = srv->getClients()[clientFd];
-				client.writeBuf = HttpResponseBuilder::buildResponse(
-					buildErrorResponse(srv->getConf(), 408, "request timeout"));
-				enableClientWrite(clientFd);
+				int timeout = srv->clientWaitingBody(clientFd) ? BODYTO : TIMEOUT;
+				if (srv->clientTimedOut(clientFd, now, timeout))
+				{
+					logs("408 timeout fd=" + toString(clientFd));
+					Client& client = srv->getClients()[clientFd];
+					client.writeBuf = HttpResponseBuilder::buildResponse(
+						buildErrorResponse(srv->getConf(), 408, "request timeout"));
+					client.waitingBody = false;
+					client.readBuf.clear();
+					enableClientWrite(clientFd);
+				}
 			}
 
-			Client& client = srv->getClients()[clientFd];
 			if (client.cgiActive)
 				CgiManager::checkChild(client.cgi);
 			if (client.cgiActive && client.cgi.startTime > 0
