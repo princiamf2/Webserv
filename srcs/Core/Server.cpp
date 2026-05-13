@@ -227,7 +227,7 @@ void Server::readClient(int fd, Core *core)
 		return ;
 	}
 
-	if (bytes == 0) // 0 = deconnexion
+	if (bytes == 0)
 	{
 		if (_clients[fd].waitingBody)
 		{
@@ -368,7 +368,7 @@ void Server::writeClient(int fd)
 		_clients[fd].toClose = true;
 		return ;
 	}
-	_clients[fd].writeBuf.erase(0, bytes); // remove only added bytes
+	_clients[fd].writeBuf.erase(0, bytes); 
 	if (_clients[fd].writeBuf.empty())
 	{
 		logs("response sent fd=" + toString(fd));

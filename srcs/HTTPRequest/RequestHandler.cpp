@@ -550,11 +550,6 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		std::string filePath;
 		std::string uploadBody;
 
-		//strict, a modifier si liberation POST
-		// 403 protege l'ecriture hors upload, 405 defendable si "methode non autorisee".
-		if (!location || location->upload_dir.empty())
-			return buildErrorResponse(server, 403, request.path);
-
 		if (!buildFilePath(root, request.path, location, server, filePath))
 			return buildErrorResponse(server, 400, request.path);
 
@@ -617,9 +612,6 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		std::string deleteBase;
 		std::string filePath;
 
-		//403 securite hors upload 405 possible si "methode non autorisee".
-		if (!location || location->upload_dir.empty())
-			return buildErrorResponse(server, 403, request.path);
 		deleteBase = resolveUploadBase(server, location);
 		if (!buildFilePath(deleteBase, request.path, location, server, filePath))
 			return buildErrorResponse(server, 400, request.path);
