@@ -170,13 +170,13 @@ static std::string toLowerString(std::string s)
 
 static bool isChunkedRequest(std::string const& headersLower)
 {
-	return (headersLower.find("transfer-encoding:") != std::string::npos
-		&& headersLower.find("chunked") != std::string::npos);
+	return (headersLower.find("transfer-encoding:") != std::string::npos && headersLower.find("chunked") != std::string::npos);
 }
 
-static ChunkedState getChunkedState(std::string const& buffer, size_t bodyStart)
+static ChunkedState getChunkedState(std::string const& buffer, size_t bodyStart, size_t* decodedSize)
 {
 	size_t pos = bodyStart;
+	size_t total = 0;
 
 	while (true)
 	{
@@ -199,6 +199,8 @@ static ChunkedState getChunkedState(std::string const& buffer, size_t bodyStart)
 
 		if (chunkSize == 0)
 		{
+			if (decodedSize)
+				*decodedSize = total;
 			if (buffer.size() >= pos + 2 && buffer.substr(pos, 2) == "\r\n")
 				return CHUNKED_COMPLETE;
 			size_t trailerEnd = buffer.find("\r\n\r\n", pos);
@@ -208,8 +210,13 @@ static ChunkedState getChunkedState(std::string const& buffer, size_t bodyStart)
 		}
 
 		if (buffer.size() < pos + chunkSize + 2)
+		{
+			if (decodedSize)
+				*decodedSize = total + chunkSize;
 			return CHUNKED_INCOMPLETE;
+		}
 
+		total += chunkSize;
 		pos += chunkSize;
 
 		if (buffer.substr(pos, 2) != "\r\n")
@@ -261,11 +268,37 @@ void Server::readClient(int fd, Core *core)
 	std::string headersPart = _clients[fd].readBuf.substr(0, headerEnd);
 	std::string headersLower = toLowerString(headersPart);
 	size_t clPos = headersLower.find("content-length:");
+	bool isChunked = isChunkedRequest(headersLower);
 
-	if (isChunkedRequest(headersLower))
+	unsigned int clientMaxBodySize = _clientMaxBodySize;
+
+	try
+	{
+		HttpRequest headerRequest = HttpParser::parseRequest(headersPart + "\r\n\r\n");
+		Location const* headerLocation = findBestLocation(_conf, headerRequest.path);
+		if (headerLocation && headerLocation->client_max_body_size_set)
+			clientMaxBodySize = headerLocation->client_max_body_size;
+	}
+	catch (std::exception const& e)
+	{
+		(void)e;
+	}
+
+	if (isChunked)
 	{
 		size_t bodyStart = headerEnd + 4;
-		ChunkedState state = getChunkedState(_clients[fd].readBuf, bodyStart);
+		size_t decodedSize = 0;
+		ChunkedState state = getChunkedState(_clients[fd].readBuf, bodyStart, &decodedSize);
+
+		if (clientMaxBodySize > 0 && decodedSize > clientMaxBodySize)
+		{
+			logs("payload too large fd=" + toString(fd) + " chunked-size=" + toString((int)decodedSize));
+			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+				buildErrorResponse(_conf, 413, "payload too large"));
+			_clients[fd].waitingBody = false;
+			_clients[fd].readBuf.clear();
+			return ;
+		}
 
 		if (state == CHUNKED_INCOMPLETE)
 		{
@@ -285,12 +318,12 @@ void Server::readClient(int fd, Core *core)
 		_clients[fd].waitingBody = false;
 	}
 
-	if (clPos != std::string::npos && clPos < headerEnd)
+	if (!isChunked && clPos != std::string::npos && clPos < headerEnd)
 	{
 		size_t clEnd = headersPart.find("\r\n", clPos);
 		std::string tmp = headersPart.substr(clPos + 15, clEnd - clPos - 15);
 		contentLength = std::atoll(tmp.c_str());
-		if (_clientMaxBodySize > 0 && contentLength > _clientMaxBodySize)
+		if (clientMaxBodySize > 0 && contentLength > clientMaxBodySize)
 		{
 			logs("payload too large fd=" + toString(fd) + " content-length=" + toString((int)contentLength));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
@@ -300,7 +333,7 @@ void Server::readClient(int fd, Core *core)
 			return ;
 		}
 		size_t bodySize = _clients[fd].readBuf.size() - (headerEnd + 4);
-		if (_clientMaxBodySize > 0 && bodySize > _clientMaxBodySize)
+		if (clientMaxBodySize > 0 && bodySize > clientMaxBodySize)
 		{
 			logs("payload too large fd=" + toString(fd) + " body-size=" + toString((int)bodySize));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(

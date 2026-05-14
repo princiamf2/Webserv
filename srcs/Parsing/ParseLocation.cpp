@@ -248,6 +248,67 @@ static bool parseLocation_UploadDir(std::istringstream& locationStream, Location
     return true;
 }
 
+static bool parseLocation_ClientMaxBodySize(std::istringstream& locationStream, Location& location)
+{
+    if (location.client_max_body_size_set)
+    {
+        std::cerr << "ERROR: DOUBLE LOCATION CLIENT_MAX_BODY_SIZE" << std::endl;
+        return false;
+    }
+
+    std::string size_str;
+    if (!(locationStream >> size_str))
+    {
+        std::cerr << "ERROR: NO LOCATION CLIENT_MAX_BODY_SIZE" << std::endl;
+        return false;
+    }
+
+    if (!stripSemicolon(size_str, size_str))
+    {
+        std::cerr << "ERROR: WRONG LOCATION CLIENT_MAX_BODY_SIZE SYNTAX" << std::endl;
+        return false;
+    }
+
+    std::istringstream in_string_stream(size_str);
+    long long size;
+
+    if (!(in_string_stream >> size))
+    {
+        std::cerr << "ERROR: WRONG LOCATION CLIENT_MAX_BODY_SIZE: " << size_str << std::endl;
+        return false;
+    }
+
+    in_string_stream >> std::ws;
+    if (in_string_stream.peek() != std::char_traits<char>::eof())
+    {
+        std::cerr << "ERROR: WRONG LOCATION CLIENT_MAX_BODY_SIZE: " << size_str << std::endl;
+        return false;
+    }
+
+    if (size <= 0)
+    {
+        std::cerr << "ERROR: LOCATION CLIENT_MAX_BODY_SIZE MUST BE > 0: " << size << std::endl;
+        return false;
+    }
+
+    if (size > 2147483647)
+    {
+        std::cerr << "ERROR: LOCATION CLIENT_MAX_BODY_SIZE TOO LARGE: " << size << std::endl;
+        return false;
+    }
+
+    std::string extra;
+    if (locationStream >> extra)
+    {
+        std::cerr << "ERROR: CANNOT HAVE TOKEN AFTER LOCATION CLIENT_MAX_BODY_SIZE: " << extra << std::endl;
+        return false;
+    }
+
+    location.client_max_body_size_set = true;
+    location.client_max_body_size = static_cast<unsigned int>(size);
+    return true;
+}
+
 static bool parseLocation_RedirectPage(std::istringstream& locationStream, Location& location)
 {
     if (location.redirect_page.first != 0 || !location.redirect_page.second.empty())
@@ -485,6 +546,11 @@ bool parseLocation(std::istringstream& lineStream, std::istringstream& stream, S
 		else if (location_word == "upload_dir")
 		{
 			if (!parseLocation_UploadDir(locationStream, location))
+				return false;
+		}
+		else if (location_word == "client_max_body_size")
+		{
+			if (!parseLocation_ClientMaxBodySize(locationStream, location))
 				return false;
 		}
 		else if (location_word == "redirect_page")

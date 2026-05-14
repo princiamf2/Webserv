@@ -453,9 +453,14 @@ bool CgiManager::writeInput(CgiProcess& process)
 		return true;
 	}
 
+	size_t remaining = process.inputBuffer.size() - process.inputOffset;
+	size_t chunkSize = remaining;
+
+	if (chunkSize > 4096)
+		chunkSize = 4096;
 	ssize_t written = write(process.stdinFd,
 		process.inputBuffer.c_str() + process.inputOffset,
-		process.inputBuffer.size() - process.inputOffset);
+		chunkSize);
 
 	//write peut retourner 0 (aucun byte) ou -1 (erreur), les deux ferment stdin
 	if (written <= 0)

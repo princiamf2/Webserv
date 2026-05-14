@@ -34,11 +34,23 @@ RequestHandler& RequestHandler::operator=(RequestHandler const& other) {(void)ot
 RequestHandler::~RequestHandler() {}
 
 //petit check de la taile du body
-static bool isBodySizeValid(HttpRequest const& request, ServerConfig const& server)
+
+static unsigned int resolveClientMaxBodySize(ServerConfig const& server,
+	Location const* location)
 {
-	if (server.client_max_body_size == 0)
+	if (location && location->client_max_body_size_set)
+		return location->client_max_body_size;
+	return server.client_max_body_size;
+}
+
+static bool isBodySizeValid(HttpRequest const& request,
+	ServerConfig const& server, Location const* location)
+{
+	unsigned int limit = resolveClientMaxBodySize(server, location);
+
+	if (limit == 0)
 		return true;
-	return (request.body.size() <= server.client_max_body_size);
+	return (request.body.size() <= limit);
 }
 
 //petit outil qui check les methods si la method on la supporte
@@ -450,7 +462,7 @@ HttpResponse RequestHandler::handleRequest(HttpRequest const& request,
 		return buildMethodNotAllowedResponse(server, location);
 
 	//si le body depasse la taille limite
-	if (!isBodySizeValid(request, server))
+	if (!isBodySizeValid(request, server, location))
 		return buildErrorResponse(server, 413);
 
 	//si une redirection
@@ -671,7 +683,7 @@ ActionRequest RequestHandler::resolveAction(HttpRequest const& request,
 	if (request.version != "HTTP/1.1"
 		|| !isSupportedMethod(request.method)
 		|| !isMethodAllowed(request.method, location)
-		|| !isBodySizeValid(request, server)
+		|| !isBodySizeValid(request, server, location)
 		|| hasRedirect(location))
 	{
 		action.type = ACTION_IMMEDIATE_RESPONSE;

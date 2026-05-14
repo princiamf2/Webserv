@@ -24,7 +24,7 @@
 # define FAIL 0
 # define TIMEOUT 60
 # define BODYTO 10
-# define CGI_TIMEOUT 5
+# define CGI_TIMEOUT 60
 
 //====================(STRUCTS)=============================//
 
@@ -62,4 +62,3 @@ class Core
 		void debug();                                                // show core and servers infos
 		std::vector<Server>& getServers();                           // getter for servers vector
 };
-
