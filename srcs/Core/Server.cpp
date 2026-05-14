@@ -199,6 +199,8 @@ static ChunkedState getChunkedState(std::string const& buffer, size_t bodyStart)
 
 		if (chunkSize == 0)
 		{
+			if (buffer.size() >= pos + 2 && buffer.substr(pos, 2) == "\r\n")
+				return CHUNKED_COMPLETE;
 			size_t trailerEnd = buffer.find("\r\n\r\n", pos);
 			if (trailerEnd != std::string::npos)
 				return CHUNKED_COMPLETE;
