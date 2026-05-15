@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   CgiManager.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
+/*   By: nicolsan <nicolsan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/05/13 18:33:58 by michel           ###   ########.fr       */
+/*   Updated: 2026/05/15 12:25:28 by nicolsan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -530,6 +530,11 @@ CgiResult CgiManager::buildFinalResult(CgiProcess& process)
 
 	if (result.rawOutput.empty())
 		return result;
+	// verifie fin propre du CGI
+	if (!WIFEXITED(process.exitStatus))
+    	return result;
+	if (WEXITSTATUS(process.exitStatus) != 0)
+    	return result;
 
 	result.response = buildResponseFromCgiOutput(result.rawOutput);
 	result.success = true;

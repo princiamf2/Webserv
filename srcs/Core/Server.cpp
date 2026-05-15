@@ -238,6 +238,7 @@ void Server::readClient(int fd, Core *core)
 			buildErrorResponse(_conf, 500, "recv failed"));
 		_clients[fd].waitingBody = false;
 		_clients[fd].readBuf.clear();
+		_clients[fd].toClose = true;
 		return ;
 	}
 
