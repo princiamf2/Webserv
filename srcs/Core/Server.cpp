@@ -135,6 +135,7 @@ void Server::addClient(int fd)
 	c.fd = fd;
 	c.toClose = false;
 	c.waitingBody = false;
+	c.closeAfterSend = false;
 	c.cgiActive = false;
 	c.lastActivity = time(NULL);
 	_clients[fd] = c;
@@ -298,6 +299,7 @@ void Server::readClient(int fd, Core *core)
 			logs("payload too large fd=" + toString(fd) + " chunked-size=" + toString((int)decodedSize));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 				buildErrorResponse(_conf, 413, "payload too large"));
+			_clients[fd].closeAfterSend = true;
 			_clients[fd].waitingBody = false;
 			_clients[fd].readBuf.clear();
 			return ;
@@ -332,6 +334,7 @@ void Server::readClient(int fd, Core *core)
 			logs("payload too large fd=" + toString(fd) + " content-length=" + toString((int)contentLength));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 				buildErrorResponse(_conf, 413, "payload too large"));
+			_clients[fd].closeAfterSend = true;
 			_clients[fd].waitingBody = false;
 			_clients[fd].readBuf.clear();
 			return ;
@@ -343,6 +346,7 @@ void Server::readClient(int fd, Core *core)
 			logs("payload too large fd=" + toString(fd) + " body-size=" + toString((int)bodySize));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 				buildErrorResponse(_conf, 413, "payload too large"));
+			_clients[fd].closeAfterSend = true;
 			_clients[fd].waitingBody = false;
 			_clients[fd].readBuf.clear();
 			return ;
@@ -417,7 +421,11 @@ void Server::writeClient(int fd)
 	if (_clients[fd].writeBuf.empty())
 	{
 		logs("response sent fd=" + toString(fd));
-		_clients[fd].toClose = true;
+		if (_clients[fd].closeAfterSend)
+		{
+			_clients[fd].toClose = true;
+			_clients[fd].waitingBody = true;
+		}
 	}
 	_clients[fd].lastActivity = time(NULL);
 }

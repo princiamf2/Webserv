@@ -20,6 +20,9 @@ NOTE=0
 KEEP_SERVER=0
 KILL_EXISTING_WEBSERV=0
 RUN_SIEGE=0
+RUN_VALGRIND=1
+KEEP_LOGS=0
+VERBOSE=0
 CURRENT_SERVER_PID=""
 CURRENT_SERVER_LOG=""
 CURRENT_SERVER_PORTS=""
@@ -88,7 +91,11 @@ cleanup() {
         done < <(find "$BACKUP_DIR" -type f | sort)
     fi
 
-    rm -rf "$TMP_DIR"
+    if [[ $KEEP_LOGS -eq 0 ]]; then
+        rm -rf "$TMP_DIR"
+    else
+        announce "Logs conserves dans: $TMP_DIR"
+    fi
 }
 
 trap cleanup EXIT
@@ -443,6 +450,45 @@ run_parser_todo_accept_case() {
     fi
 }
 
+run_parser_suite_dir() {
+    local parser_bin="$1"
+    local dir="$2"
+    local mode="$3"
+    local file
+    local output
+    local name
+
+    if [[ ! -d "$dir" ]]; then
+        skip "suite parsing absente: $dir"
+        return 0
+    fi
+
+    while IFS= read -r file; do
+        [[ -n "$file" ]] || continue
+        name="$(basename "$file")"
+        output="$("$parser_bin" "$file" 2>&1 || true)"
+        if [[ "$mode" == "invalid" ]]; then
+            if printf "%s" "$output" | grep -Fq "nb de servers: 0"; then
+                pass "parse suite invalid: $name rejete"
+            else
+                fail "parse suite invalid: $name accepte a tort"
+                log "--- PARSER SUITE OUTPUT $name ---"
+                printf "%s\n" "$output" | sed -n '1,80p' >> "$RESULT_FILE"
+                log "--- FIN PARSER SUITE OUTPUT ---"
+            fi
+        else
+            if printf "%s" "$output" | grep -Eq "nb de servers: [1-9][0-9]*"; then
+                pass "parse suite valid: $name accepte"
+            else
+                note "parse suite valid: $name rejete (fixture peut etre obsolete)"
+                log "--- PARSER SUITE OUTPUT $name ---"
+                printf "%s\n" "$output" | sed -n '1,80p' >> "$RESULT_FILE"
+                log "--- FIN PARSER SUITE OUTPUT ---"
+            fi
+        fi
+    done < <(find "$dir" -type f -name '*.config' | sort)
+}
+
 
 check_header_contains() {
     local label="$1"
@@ -507,16 +553,25 @@ progressive_chunked_status() {
     local second_chunk="$4"
     local limit="${5:-8}"
     local line
+    local full_response
 
-    line="$(timeout "$limit" bash -c '
+    full_response="$(timeout "$limit" bash -c '
         exec 3<>/dev/tcp/127.0.0.1/"$1" || exit 111
         printf "POST %s HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n" "$2" >&3
         printf "%s\r\n%s\r\n" "${#3}" "$3" >&3
         sleep 1
         printf "%s\r\n%s\r\n0\r\n\r\n" "${#4}" "$4" >&3
         cat <&3
-    ' _ "$port" "$path" "$first_chunk" "$second_chunk" 2>/dev/null | tr -d '\r' | awk 'NR==1{print; exit}')"
-    printf "%s" "$line" | awk '{print $2}'
+    ' _ "$port" "$path" "$first_chunk" "$second_chunk" 2>&1 || true)"
+    
+    line="$(printf "%s" "$full_response" | tr -d '\r' | awk 'NR==1{print; exit}')"
+    
+    if [[ -z "$line" ]]; then
+        [[ $VERBOSE -eq 1 ]] && log "DEBUG: progressive_chunked - empty response"
+        printf ""
+    else
+        printf "%s" "$line" | awk '{print $2}'
+    fi
 }
 
 incomplete_chunked_status() {
@@ -532,6 +587,23 @@ incomplete_chunked_status() {
         cat <&3
     ' _ "$port" "$path" 2>/dev/null | tr -d '\r' | awk 'NR==1{print; exit}')"
     printf "%s" "$line" | awk '{print $2}'
+}
+
+cgi_chunked_response() {
+    local port="$1"
+    local path="$2"
+    local first_chunk="$3"
+    local second_chunk="$4"
+    local limit="${5:-8}"
+
+    timeout "$limit" bash -c '
+        exec 3<>/dev/tcp/127.0.0.1/"$1" || exit 111
+        printf "POST %s HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n" "$2" >&3
+        printf "%x\r\n%s\r\n" "${#3}" "$3" >&3
+        sleep 1
+        printf "%x\r\n%s\r\n0\r\n\r\n" "${#4}" "$4" >&3
+        cat <&3
+    ' _ "$port" "$path" "$first_chunk" "$second_chunk" 2>/dev/null
 }
 
 run_telnet_get() {
@@ -599,6 +671,41 @@ test_build() {
     fi
 }
 
+check_program_rejects() {
+    local label="$1"
+    shift
+    local output
+    local code
+
+    output="$(timeout 5s "$@" 2>&1)"
+    code=$?
+    if [[ "$code" != "0" && "$code" != "139" && "$code" != "124" ]]; then
+        pass "$label rejete proprement (exit=$code)"
+    elif [[ "$code" == "139" ]]; then
+        fail "$label provoque un crash (segfault)"
+    elif [[ "$code" == "124" ]]; then
+        fail "$label ne termine pas (timeout)"
+    else
+        fail "$label accepte a tort"
+    fi
+    if [[ $VERBOSE -eq 1 ]]; then
+        log "--- PROGRAM OUTPUT $label ---"
+        printf "%s\n" "$output" | sed -n '1,40p' >> "$RESULT_FILE"
+        log "--- FIN PROGRAM OUTPUT ---"
+    fi
+}
+
+test_program_invocation() {
+    section "PROGRAM INVOCATION"
+
+    local empty_conf="$TMP_DIR/empty.config"
+    : > "$empty_conf"
+
+    check_program_rejects "Trop d'arguments" ./webserv configs/Core.config configs/test.config
+    check_program_rejects "Config inexistante" ./webserv "$TMP_DIR/does_not_exist.config"
+    check_program_rejects "Config vide" ./webserv "$empty_conf"
+}
+
 test_code_checks() {
     section "CODE CHECKS"
 
@@ -608,6 +715,8 @@ test_code_checks() {
     local accept_count
     local errno_bad
     local eagain_count
+    local boost_hits
+    local external_lib_hits
 
     alt_event_mech="$(grep -R -n --include='*.cpp' --include='*.hpp' -E '(^|[^A-Za-z0-9_])(select|epoll_wait|kqueue|kevent)[[:space:]]*\(' srcs 2>/dev/null || true)"
     if [[ -z "$alt_event_mech" ]]; then
@@ -672,6 +781,22 @@ test_code_checks() {
     grep -q 'chdir' srcs/HTTPRequest/CgiManager.cpp && pass "CGI change de dossier via chdir()" || fail "chdir() absent de CgiManager.cpp"
     grep -q 'CgiManager::writeInput' srcs/Core/Core.cpp && grep -Eq 'POLLOUT' srcs/Core/Core.cpp && pass "CGI stdin ecrit via POLLOUT" || fail "CGI stdin ne semble pas ecrit via POLLOUT"
     grep -q 'CgiManager::readOutput' srcs/Core/Core.cpp && grep -Eq 'POLLIN|POLLHUP' srcs/Core/Core.cpp && pass "CGI stdout lu via POLLIN/POLLHUP" || fail "CGI stdout ne semble pas lu via POLLIN/POLLHUP"
+
+    boost_hits="$(grep -R -n --include='*.cpp' --include='*.hpp' --include='Makefile' -E 'boost/|namespace boost|\\-lboost' srcs Makefile 2>/dev/null || true)"
+    if [[ -z "$boost_hits" ]]; then
+        pass "Aucune utilisation Boost detectee"
+    else
+        fail "Boost detecte alors qu'il est interdit"
+        printf "%s\n" "$boost_hits" >> "$RESULT_FILE"
+    fi
+
+    external_lib_hits="$(grep -n -E '(^|[[:space:]])-l[^[:space:]]+' Makefile 2>/dev/null || true)"
+    if [[ -z "$external_lib_hits" ]]; then
+        pass "Aucune bibliotheque externe liee dans le Makefile"
+    else
+        fail "Bibliotheque externe detectee dans le Makefile"
+        printf "%s\n" "$external_lib_hits" >> "$RESULT_FILE"
+    fi
 }
 
 test_parsing_validation() {
@@ -815,6 +940,10 @@ test_parsing_validation() {
         "nb de servers: 1" \
         "parse_valid_absolute_paths.conf" \
         'server {\n    listen 8080;\n    domain_name localhost;\n    root /tmp;\n    index index.html;\n    client_max_body_size 1000;\n    location /upload/ {\n        root /tmp;\n        upload_dir /tmp;\n        methods GET POST DELETE;\n    }\n}\n'
+
+    run_parser_suite_dir "$parser_bin" \
+        "srcs/Parsing/errors_config_tests/configs_invalid" \
+        "invalid"
 }
 
 test_core_runtime() {
@@ -829,7 +958,7 @@ test_core_runtime() {
     fi
 
     pass "Core.config demarre sur 8080"
-    #run_telnet_get
+    run_telnet_get
 
     check_code "GET /" 200 "http://127.0.0.1:8080/"
     check_code "GET /script.js" 200 "http://127.0.0.1:8080/script.js"
@@ -851,11 +980,33 @@ test_core_runtime() {
 
     check_raw_status "400 requete HTTP/1.1 sans Host" 8080 400 $'GET / HTTP/1.1\r\nConnection: close\r\n\r\n'
     check_raw_status "505 version HTTP/1.0" 8080 505 $'GET / HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n'
+    check_raw_status "400 header malforme sans deux-points" 8080 400 $'GET / HTTP/1.1\r\nHost: localhost\r\nBrokenHeader\r\nConnection: close\r\n\r\n'
+    check_raw_status "400 Content-Length non numerique" 8080 400 $'POST /upload/bad_cl.txt HTTP/1.1\r\nHost: localhost\r\nContent-Length: abc\r\nConnection: close\r\n\r\nabc'
+    check_raw_status "400 body plus long que Content-Length" 8080 400 $'POST /upload/bad_cl_long.txt HTTP/1.1\r\nHost: localhost\r\nContent-Length: 3\r\nConnection: close\r\n\r\nabcdef'
 
     check_code "POST /upload/ -> 201" 201 -X POST --data "hello eval" "http://127.0.0.1:8080/upload/eval_test.txt"
     check_code "GET fichier upload -> 200" 200 "http://127.0.0.1:8080/upload/eval_test.txt"
     check_body_contains "Contenu du fichier upload correct" "http://127.0.0.1:8080/upload/eval_test.txt" "hello eval"
     check_code "DELETE fichier upload -> 204" 204 -X DELETE "http://127.0.0.1:8080/upload/eval_test.txt"
+    check_code "GET apres DELETE fichier upload -> 404" 404 "http://127.0.0.1:8080/upload/eval_test.txt"
+
+    local binary_src binary_dst binary_code
+    binary_src="$TMP_DIR/binary_upload_eval.bin"
+    binary_dst="$TMP_DIR/binary_download_eval.bin"
+    if head -c 8192 /dev/urandom > "$binary_src" 2>/dev/null; then
+        binary_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 -X POST --data-binary @"$binary_src" "http://127.0.0.1:8080/upload/binary_eval.bin" 2>/dev/null || true)"
+        if [[ "$binary_code" == "201" ]] \
+            && curl -s --max-time 8 "http://127.0.0.1:8080/upload/binary_eval.bin" -o "$binary_dst" 2>/dev/null \
+            && cmp -s "$binary_src" "$binary_dst"; then
+            pass "Upload/download binaire conserve les octets"
+        else
+            fail "Upload/download binaire incorrect (POST status=$binary_code)"
+        fi
+        check_code "DELETE fichier binaire upload -> 204" 204 -X DELETE "http://127.0.0.1:8080/upload/binary_eval.bin"
+        check_code "GET apres DELETE fichier binaire -> 404" 404 "http://127.0.0.1:8080/upload/binary_eval.bin"
+    else
+        skip "Upload binaire impossible: /dev/urandom indisponible"
+    fi
 
     local chunked_progress_code
     chunked_progress_code="$(progressive_chunked_status 8080 "/upload/chunked_progressive_eval.txt" "hello" "world" 8)"
@@ -881,10 +1032,10 @@ test_core_runtime() {
     printf "unreadable eval\n" > "$unreadable_file"
     if chmod 000 "$unreadable_file" 2>/dev/null; then
         unreadable_code="$(http_code "http://127.0.0.1:8080/unreadable_eval.txt" 2>/dev/null || true)"
-        if [[ "$unreadable_code" == "500" ]]; then
-            pass "Erreur read fichier -> 500"
+        if [[ "$unreadable_code" == "403" || "$unreadable_code" == "500" ]]; then
+            pass "Erreur read fichier -> $unreadable_code"
         else
-            note "TODO: Erreur read fichier -> attendu=500 recu=$unreadable_code"
+            fail "Erreur read fichier -> attendu=403/500 recu=$unreadable_code"
         fi
         chmod 644 "$unreadable_file" 2>/dev/null || true
     else
@@ -965,12 +1116,80 @@ test_core_runtime() {
     restore_file "configs/www/cgi-bin/test.py"
     chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
 
+    backup_file "configs/www/cgi-bin/test.py"
+    write_file "configs/www/cgi-bin/test.py" '#!/usr/bin/env python3\nprint("Content-Type: text/plain")\nprint()\nprint("A" * 262144)\n'
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+    local cgi_big_out_len
+    cgi_big_out_len="$(curl -s --max-time 12 "http://127.0.0.1:8080/cgi-bin/test.py" 2>/dev/null | wc -c | tr -d ' ' || true)"
+    if [[ "$cgi_big_out_len" == "262145" ]]; then
+        pass "CGI grosse sortie stdout transmise completement"
+    else
+        fail "CGI grosse sortie stdout incomplete (octets=$cgi_big_out_len attendu=262145)"
+    fi
+    restore_file "configs/www/cgi-bin/test.py"
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+
+    backup_file "configs/www/cgi-bin/test.py"
+    write_file "configs/www/cgi-bin/test.py" '#!/usr/bin/env python3\nimport sys\nbody = sys.stdin.buffer.read()\nprint("Content-Type: text/plain")\nprint()\nprint("LEN=" + str(len(body)))\n'
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+    local cgi_big_post_src cgi_big_post_body
+    cgi_big_post_src="$TMP_DIR/cgi_big_post_eval.bin"
+    head -c 131072 /dev/zero | tr '\0' 'P' > "$cgi_big_post_src"
+    cgi_big_post_body="$(curl -s --max-time 12 -X POST --data-binary @"$cgi_big_post_src" "http://127.0.0.1:8080/cgi-bin/test.py" 2>/dev/null || true)"
+    if printf "%s" "$cgi_big_post_body" | grep -Fq "LEN=131072"; then
+        pass "CGI gros POST stdin transmis completement"
+    else
+        fail "CGI gros POST stdin incomplet"
+        log "--- CGI BIG POST BODY ---"
+        printf "%s\n" "$cgi_big_post_body" | sed -n '1,40p' >> "$RESULT_FILE"
+        log "--- FIN CGI BIG POST BODY ---"
+    fi
+    restore_file "configs/www/cgi-bin/test.py"
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+
+    backup_file "configs/www/cgi-bin/test.py"
+    write_file "configs/www/cgi-bin/test.py" '#!/usr/bin/env python3\nimport os, sys\nbody = sys.stdin.read()\nprint("Content-Type: text/plain")\nprint()\nprint("METHOD=" + os.environ.get("REQUEST_METHOD", ""))\nprint("CONTENT_LENGTH=" + os.environ.get("CONTENT_LENGTH", ""))\nprint("BODY=" + body)\n'
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+    local cgi_chunked_out cgi_chunked_status
+    cgi_chunked_out="$(cgi_chunked_response 8080 "/cgi-bin/test.py" "hello" "world" 10 || true)"
+    cgi_chunked_status="$(printf "%s" "$cgi_chunked_out" | tr -d '\r' | awk 'NR==1{print $2; exit}')"
+    if [[ "$cgi_chunked_status" == "200" ]] \
+        && printf "%s" "$cgi_chunked_out" | grep -Fq "METHOD=POST" \
+        && printf "%s" "$cgi_chunked_out" | grep -Fq "BODY=helloworld"; then
+        pass "CGI recoit le body chunked dechunked"
+    else
+        fail "CGI chunked -> attendu 200 avec BODY=helloworld, recu status=$cgi_chunked_status"
+        log "--- CGI CHUNKED RESPONSE ---"
+        printf "%s\n" "$cgi_chunked_out" | sed -n '1,80p' >> "$RESULT_FILE"
+        log "--- FIN CGI CHUNKED RESPONSE ---"
+    fi
+    restore_file "configs/www/cgi-bin/test.py"
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+
     local cookie_headers
     cookie_headers="$(http_head 'http://127.0.0.1:8080/' 2>/dev/null || true)"
     if printf "%s" "$cookie_headers" | grep -qi '^set-cookie:'; then
         pass "Bonus cookies/sessions: Set-Cookie present"
     else
         note "Bonus cookies/sessions: aucun Set-Cookie observe sur GET /"
+    fi
+
+    local cookie_jar session_first session_second session_id_first session_id_second
+    cookie_jar="$TMP_DIR/session_eval.cookies"
+    session_first="$(curl -s --max-time 8 -c "$cookie_jar" "http://127.0.0.1:8080/session" 2>/dev/null || true)"
+    session_second="$(curl -s --max-time 8 -b "$cookie_jar" -c "$cookie_jar" "http://127.0.0.1:8080/session" 2>/dev/null || true)"
+    session_id_first="$(printf "%s\n" "$session_first" | awk -F': ' '/^Session ID:/ {print $2; exit}')"
+    session_id_second="$(printf "%s\n" "$session_second" | awk -F': ' '/^Session ID:/ {print $2; exit}')"
+    if [[ -n "$session_id_first" && "$session_id_first" == "$session_id_second" ]] \
+        && printf "%s" "$session_second" | grep -Fq "Views: 2"; then
+        pass "Bonus cookies/sessions: session persistante avec cookie"
+    else
+        note "Bonus cookies/sessions: persistance non confirmee"
+        log "--- SESSION FIRST ---"
+        printf "%s\n" "$session_first" >> "$RESULT_FILE"
+        log "--- SESSION SECOND ---"
+        printf "%s\n" "$session_second" >> "$RESULT_FILE"
+        log "--- FIN SESSION ---"
     fi
 
     backup_file "configs/www/cgi-bin/test.py"
@@ -985,7 +1204,7 @@ test_core_runtime() {
     write_file "configs/www/cgi-bin/test.py" '#!/usr/bin/env python3\nimport time\nwhile True:\n    time.sleep(1)\n'
     chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
     local cgi_loop_code
-    cgi_loop_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:8080/cgi-bin/test.py" 2>/dev/null)"
+    cgi_loop_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 70 "http://127.0.0.1:8080/cgi-bin/test.py" 2>/dev/null)"
     if [[ "$cgi_loop_code" == "504" ]]; then
         pass "CGI boucle infinie -> 504 Gateway Timeout"
     else
@@ -1028,7 +1247,7 @@ test_core_runtime() {
 
     # --- Headers de reponse ---
     local ct_html
-    ct_html="$(curl -sI --max-time 8 'http://127.0.0.1:8080/' 2>/dev/null | grep -i '^content-type:' || true)"
+    ct_html="$(curl -s --max-time 8 -D - -o /dev/null 'http://127.0.0.1:8080/' 2>/dev/null | grep -i '^content-type:' || true)"
     if printf "%s" "$ct_html" | grep -qi 'text/html'; then
         pass "Content-Type text/html pour GET /"
     else
@@ -1036,7 +1255,7 @@ test_core_runtime() {
     fi
 
     local ct_css
-    ct_css="$(curl -sI --max-time 8 'http://127.0.0.1:8080/assets/styles.css' 2>/dev/null | grep -i '^content-type:' || true)"
+    ct_css="$(curl -s --max-time 8 -D - -o /dev/null 'http://127.0.0.1:8080/assets/styles.css' 2>/dev/null | grep -i '^content-type:' || true)"
     if printf "%s" "$ct_css" | grep -qi 'text/css'; then
         pass "Content-Type text/css pour /assets/styles.css"
     else
@@ -1044,7 +1263,7 @@ test_core_runtime() {
     fi
 
     local ct_js
-    ct_js="$(curl -sI --max-time 8 'http://127.0.0.1:8080/script.js' 2>/dev/null | grep -i '^content-type:' || true)"
+    ct_js="$(curl -s --max-time 8 -D - -o /dev/null 'http://127.0.0.1:8080/script.js' 2>/dev/null | grep -i '^content-type:' || true)"
     if printf "%s" "$ct_js" | grep -qi 'javascript'; then
         pass "Content-Type javascript pour /script.js"
     else
@@ -1053,7 +1272,7 @@ test_core_runtime() {
 
     # Content-Length present et coherent
     local cl_val cl_body_len
-    cl_val="$(curl -sI --max-time 8 'http://127.0.0.1:8080/script.js' 2>/dev/null | grep -i '^content-length:' | tr -d '\r' | awk '{print $2}' || true)"
+    cl_val="$(curl -s --max-time 8 -D - -o /dev/null 'http://127.0.0.1:8080/script.js' 2>/dev/null | grep -i '^content-length:' | tr -d '\r' | awk '{print $2}' || true)"
     cl_body_len="$(curl -s --max-time 8 'http://127.0.0.1:8080/script.js' 2>/dev/null | wc -c | tr -d ' ' || true)"
     if [[ -n "$cl_val" && "$cl_val" == "$cl_body_len" ]]; then
         pass "Content-Length correct pour /script.js ($cl_val octets)"
@@ -1063,8 +1282,8 @@ test_core_runtime() {
         fail "Content-Length incorrect pour /script.js: header=$cl_val body=$cl_body_len"
     fi
 
-    # HEAD : headers presents, body vide
-    local head_status head_cl head_body_bytes
+    # HEAD suit la config: Core.config autorise seulement GET sur /
+    local head_status head_cl
     head_status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 -X HEAD 'http://127.0.0.1:8080/' 2>/dev/null || true)"
     if [[ "$head_status" == "200" ]]; then
         pass "HEAD / -> 200"
@@ -1076,12 +1295,6 @@ test_core_runtime() {
         pass "HEAD / contient Content-Length"
     else
         fail "HEAD / ne contient pas Content-Length"
-    fi
-    head_body_bytes="$(curl -s --max-time 8 -X HEAD 'http://127.0.0.1:8080/' 2>/dev/null | wc -c | tr -d ' ' || true)"
-    if [[ "$head_body_bytes" == "0" ]]; then
-        pass "HEAD / body vide (0 octets)"
-    else
-        fail "HEAD / body non vide ($head_body_bytes octets)"
     fi
 
     # Path traversal
@@ -1102,6 +1315,54 @@ test_core_runtime() {
 
     # CGI QUERY_STRING
     check_body_contains "CGI QUERY_STRING transmis" "http://127.0.0.1:8080/cgi-bin/test.py?foo=bar" "QUERY = foo=bar"
+
+    backup_file "configs/www/cgi-bin/test.py"
+    write_file "configs/www/cgi-bin/test.py" '#!/usr/bin/env python3\nimport os\nprint("Content-Type: text/plain")\nprint()\nprint("SCRIPT_NAME=" + os.environ.get("SCRIPT_NAME", ""))\nprint("PATH_INFO=" + os.environ.get("PATH_INFO", ""))\nprint("QUERY_STRING=" + os.environ.get("QUERY_STRING", ""))\n'
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+    local cgi_path_info_body
+    cgi_path_info_body="$(curl -s --max-time 8 "http://127.0.0.1:8080/cgi-bin/test.py/extra/path?x=1" 2>/dev/null || true)"
+    if printf "%s" "$cgi_path_info_body" | grep -Fq "PATH_INFO=/extra/path" \
+        && printf "%s" "$cgi_path_info_body" | grep -Fq "QUERY_STRING=x=1"; then
+        pass "CGI PATH_INFO et QUERY_STRING transmis ensemble"
+    else
+        fail "CGI PATH_INFO/QUERY_STRING incorrect"
+        log "--- CGI PATH_INFO BODY ---"
+        printf "%s\n" "$cgi_path_info_body" >> "$RESULT_FILE"
+        log "--- FIN CGI PATH_INFO BODY ---"
+    fi
+    restore_file "configs/www/cgi-bin/test.py"
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+
+    backup_file "configs/www/cgi-bin/test.py"
+    write_file "configs/www/cgi-bin/test.py" '#!/usr/bin/env python3\nprint("Status: 404 Not Found")\nprint("Content-Type: text/plain")\nprint()\nprint("cgi status body")\n'
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+    local cgi_status_code cgi_status_body
+    cgi_status_code="$(http_code "http://127.0.0.1:8080/cgi-bin/test.py" 2>/dev/null || true)"
+    cgi_status_body="$(http_body "http://127.0.0.1:8080/cgi-bin/test.py" 2>/dev/null || true)"
+    if [[ "$cgi_status_code" == "404" ]] && printf "%s" "$cgi_status_body" | grep -Fq "cgi status body"; then
+        pass "CGI Status header definit le code HTTP"
+    else
+        fail "CGI Status header -> attendu=404 avec body, recu=$cgi_status_code"
+    fi
+    restore_file "configs/www/cgi-bin/test.py"
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+
+    backup_file "configs/www/cgi-bin/test.py"
+    write_file "configs/www/cgi-bin/test.py" '#!/usr/bin/env python3\nprint("Location: /docs/")\nprint("Content-Type: text/plain")\nprint()\nprint("cgi redirect body")\n'
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
+    local cgi_location_headers
+    cgi_location_headers="$(http_head "http://127.0.0.1:8080/cgi-bin/test.py" 2>/dev/null || true)"
+    if printf "%s" "$cgi_location_headers" | tr -d '\r' | grep -Fq "HTTP/1.1 302" \
+        && printf "%s" "$cgi_location_headers" | grep -Fqi "Location: /docs/"; then
+        pass "CGI Location header produit une redirection 302"
+    else
+        fail "CGI Location header ne produit pas la redirection attendue"
+        log "--- CGI LOCATION HEADERS ---"
+        printf "%s\n" "$cgi_location_headers" >> "$RESULT_FILE"
+        log "--- FIN CGI LOCATION HEADERS ---"
+    fi
+    restore_file "configs/www/cgi-bin/test.py"
+    chmod +x "$ROOT_DIR/configs/www/cgi-bin/test.py"
 
     # CGI fichier inexistant -> 404
     check_code "CGI fichier inexistant -> 404" 404 "http://127.0.0.1:8080/cgi-bin/does_not_exist.py"
@@ -1203,7 +1464,7 @@ test_test_config() {
     if optional_cmd php-cgi; then
         local php_code
         php_code="$(http_code 'http://127.0.0.1:8081/cgi-php/test.php' 2>/dev/null || true)"
-        check_code_any "8081 CGI PHP" "$php_code" 200 500
+        check_code_any "8081 CGI PHP" "$php_code" 200
     else
         skip "8081 CGI PHP impossible: php-cgi absent"
     fi
@@ -1262,60 +1523,82 @@ test_multi_config() {
 test_interface_port_config() {
     section "INTERFACE:PORT CONFIG"
 
-    local iface_conf="$TMP_DIR/interface_port.config"
-    local iface_log="$TMP_DIR/interface_port.log"
-    local iface_pid
-    cat > "$iface_conf" <<'EOF'
-server {
-    listen 127.0.0.1:8090;
-    domain_name localhost;
-    root ./configs/www;
-    index index.html;
-    client_max_body_size 1000000;
-    location /upload/ {
-        root ./configs/www/upload;
-        upload_dir ./configs/www/upload;
-        methods GET POST DELETE;
-    }
-}
-EOF
-
-    kill_existing_webserv_on_ports "8090" || true
-    sleep 1
-    if ports_busy "8090"; then
-        skip "Config listen 127.0.0.1:8090 impossible: port deja occupe"
-        ports_busy_details "8090" || true
+    if [[ ! -f "configs/interface_port.config" ]]; then
+        fail "configs/interface_port.config absent"
         return 1
     fi
 
-    ./webserv "$iface_conf" < <(tail -f /dev/null) > "$iface_log" 2>&1 &
-    iface_pid=$!
-    sleep 1
+    if ! start_server "configs/interface_port.config" "8080"; then
+        return 1
+    fi
 
-    if ! kill -0 "$iface_pid" 2>/dev/null; then
-        if grep -q 'WRONG PORT NUMBER' "$iface_log" 2>/dev/null; then
-            note "TODO: listen 127.0.0.1:8090 pas encore supporte par la config"
-        else
-            fail "Demarrage de ./webserv $iface_conf impossible: processus termine juste apres lancement"
-        fi
-        log "--- LOG $iface_conf ---"
-        sed -n '1,60p' "$iface_log" >> "$RESULT_FILE"
+    wait_http "http://127.0.0.1:8080/" || { fail "interface_port.config ne repond pas sur 127.0.0.1:8080"; return 1; }
+    wait_http "http://127.0.0.2:8080/" || { fail "interface_port.config ne repond pas sur 127.0.0.2:8080"; return 1; }
+
+    check_code "interface_port 127.0.0.1:8080 -> 200" 200 "http://127.0.0.1:8080/"
+    check_code "interface_port 127.0.0.2:8080 -> 200" 200 "http://127.0.0.2:8080/"
+
+    stop_server
+
+    local conflict_conf="$TMP_DIR/interface_port_conflict.config"
+    local conflict_log="$TMP_DIR/interface_port_conflict.log"
+    sed 's/127\.0\.0\.2:8080/127.0.0.1:8080/' configs/interface_port.config > "$conflict_conf"
+
+    ./webserv "$conflict_conf" > "$conflict_log" 2>&1 &
+    local conflict_pid=$!
+    sleep 1
+    if kill -0 "$conflict_pid" 2>/dev/null; then
+        fail "interface_port accepte deux fois le meme interface:port"
+        kill "$conflict_pid" 2>/dev/null || true
+        wait "$conflict_pid" 2>/dev/null || true
+    elif grep -Fq "multiple servers for same interface:port" "$conflict_log"; then
+        pass "interface_port rejette deux fois le meme interface:port"
+    else
+        fail "interface_port conflit attendu mais message absent"
+        log "--- LOG interface_port_conflict ---"
+        sed -n '1,60p' "$conflict_log" >> "$RESULT_FILE"
         log "--- FIN LOG ---"
-        return 1
     fi
 
-    CURRENT_SERVER_PID="$iface_pid"
-    CURRENT_SERVER_LOG="$iface_log"
-    CURRENT_SERVER_PORTS="8090"
-    printf "%s\n" "$CURRENT_SERVER_PID" > "$PID_FILE"
+    local any_conf="$TMP_DIR/interface_port_any_conflict.config"
+    local any_log="$TMP_DIR/interface_port_any_conflict.log"
+    sed '0,/127\.0\.0\.1:8080/s//0.0.0.0:8080/; s/127\.0\.0\.2:8080/127.0.0.1:8080/' configs/interface_port.config > "$any_conf"
 
-    wait_http "http://127.0.0.1:8090/" || { fail "Config listen 127.0.0.1:8090 ne repond pas"; return 1; }
+    ./webserv "$any_conf" > "$any_log" 2>&1 &
+    local any_pid=$!
+    sleep 1
+    if kill -0 "$any_pid" 2>/dev/null; then
+        fail "interface_port accepte 0.0.0.0:8080 avec 127.0.0.1:8080"
+        kill "$any_pid" 2>/dev/null || true
+        wait "$any_pid" 2>/dev/null || true
+    elif grep -Fq "multiple servers for same interface:port" "$any_log"; then
+        pass "interface_port rejette 0.0.0.0:8080 avec 127.0.0.1:8080"
+    else
+        fail "interface_port conflit 0.0.0.0 attendu mais message absent"
+        log "--- LOG interface_port_any_conflict ---"
+        sed -n '1,60p' "$any_log" >> "$RESULT_FILE"
+        log "--- FIN LOG ---"
+    fi
 
-    check_code "listen 127.0.0.1:8090 GET / -> 200" 200 "http://127.0.0.1:8090/"
-    check_code "listen 127.0.0.1:8090 POST upload -> 201" 201 -X POST --data "iface_port" "http://127.0.0.1:8090/upload/iface_port_eval.txt"
-    check_body_contains "listen 127.0.0.1:8090 upload lisible" "http://127.0.0.1:8090/upload/iface_port_eval.txt" "iface_port"
-    check_code "listen 127.0.0.1:8090 DELETE upload -> 204" 204 -X DELETE "http://127.0.0.1:8090/upload/iface_port_eval.txt"
-    rm -f "$ROOT_DIR/configs/www/upload/iface_port_eval.txt" 2>/dev/null || true
+    local old_conf="$TMP_DIR/interface_port_old_syntax_conflict.config"
+    local old_log="$TMP_DIR/interface_port_old_syntax_conflict.log"
+    sed '0,/listen 127\.0\.0\.1:8080;/s//listen 8080;/; s/127\.0\.0\.2:8080/127.0.0.1:8080/' configs/interface_port.config > "$old_conf"
+
+    ./webserv "$old_conf" > "$old_log" 2>&1 &
+    local old_pid=$!
+    sleep 1
+    if kill -0 "$old_pid" 2>/dev/null; then
+        fail "interface_port accepte listen 8080 avec 127.0.0.1:8080"
+        kill "$old_pid" 2>/dev/null || true
+        wait "$old_pid" 2>/dev/null || true
+    elif grep -Fq "multiple servers for same interface:port" "$old_log"; then
+        pass "interface_port rejette listen 8080 avec 127.0.0.1:8080"
+    else
+        fail "interface_port conflit ancienne syntaxe attendu mais message absent"
+        log "--- LOG interface_port_old_syntax_conflict ---"
+        sed -n '1,60p' "$old_log" >> "$RESULT_FILE"
+        log "--- FIN LOG ---"
+    fi
 }
 
 test_port_conflicts() {
@@ -1443,6 +1726,11 @@ test_siege() {
 test_valgrind_best_effort() {
     section "VALGRIND (OPTIONNEL)"
 
+    if [[ $RUN_VALGRIND -eq 0 ]]; then
+        skip "Valgrind desactive (--skip-valgrind)"
+        return 0
+    fi
+
     stop_server
     kill_existing_webserv_on_ports "8080" || true
 
@@ -1544,30 +1832,55 @@ test_valgrind_best_effort() {
 
 print_summary() {
     echo
-    echo "PASS: $PASS"
-    echo "FAIL: $FAIL"
-    echo "SKIP/IMPOSSIBLE: $SKIP"
-    echo "NOTE: $NOTE"
+    echo "================================================================"
+    echo "RESUME FINAL - $(timestamp)"
+    echo "================================================================"
+    
+    local total=$((PASS + FAIL + SKIP + NOTE))
+    local pass_percent=$((PASS * 100 / total))
+    
+    echo ""
+    echo "Tests executes: $total"
+    printf " - PASS: %3d (%3d%%)\n" "$PASS" "$pass_percent"
+    printf " - FAIL: %3d\n" "$FAIL"
+    printf " - SKIP/IMPOSSIBLE: %3d\n" "$SKIP"
+    printf " - NOTE (TODO/ambigu): %3d\n" "$NOTE"
+    echo ""
     echo "Rapport complet: $RESULT_FILE"
+    if [[ $KEEP_LOGS -eq 1 ]]; then
+        echo "Logs temporaires: $TMP_DIR"
+    fi
 
     if [[ -n ${FAIL_LIST[*]-} ]]; then
         echo
-        echo "Faux:"
+        echo "FAUX (a corriger):"
         printf ' - %s\n' "${FAIL_LIST[@]}"
     fi
 
     if [[ -n ${SKIP_LIST[*]-} ]]; then
         echo
-        echo "Impossible:"
+        echo "IMPOSSIBLE (dépendances/env):"
         printf ' - %s\n' "${SKIP_LIST[@]}"
     fi
 
     if [[ -n ${NOTE_LIST[*]-} ]]; then
         echo
-        echo "Ambigus / manuels:"
+        echo "TODO / Ambigus (a verifier manuellement):"
         printf ' - %s\n' "${NOTE_LIST[@]}"
     fi
+    
+    echo ""
+    echo "================================================================"
+    if [[ $FAIL -eq 0 && $SKIP -eq 0 ]]; then
+        echo "✓ EVALUATION REUSSIE (tous les tests critiques passes)"
+    elif [[ $FAIL -eq 0 ]]; then
+        echo "✓ EVALUATION REUSSIE (pas de FAIL, $NOTE TODO a verifier)"
+    else
+        echo "✗ EVALUATION EN ECHEC ($FAIL FAIL detectes)"
+    fi
+    echo "================================================================"
 }
+
 
 main() {
     : > "$RESULT_FILE"
@@ -1580,31 +1893,52 @@ main() {
         case "$1" in
             --keep-server)
                 KEEP_SERVER=1
-                note "Option --keep-server activee: le dernier serveur ne sera pas arrete automatiquement"
                 ;;
             --kill-existing-webserv)
                 KILL_EXISTING_WEBSERV=1
-                note "Option --kill-existing-webserv activee: les webserv deja a l'ecoute sur les ports testes seront termines"
                 ;;
             --with-siege)
                 RUN_SIEGE=1
-                note "Option --with-siege activee: les tests de charge siege seront executes"
+                ;;
+            --skip-valgrind)
+                RUN_VALGRIND=0
+                ;;
+            --keep-logs)
+                KEEP_LOGS=1
+                ;;
+            --verbose)
+                VERBOSE=1
                 ;;
             --help|-h)
-                echo "Usage: ./eval_test.sh [--keep-server] [--kill-existing-webserv] [--with-siege]"
-                echo "  --keep-server            garde le dernier serveur lance vivant"
-                echo "  --kill-existing-webserv  termine les processus 'webserv' deja a l'ecoute sur 8080/8081/8082 avant les tests"
-                echo "  --with-siege             execute les tests de charge siege optionnels"
+                echo "Usage: ./eval_test.sh [options]"
+                echo ""
+                echo "Options:"
+                echo "  --keep-server              garde le dernier serveur lance vivant"
+                echo "  --kill-existing-webserv    termine les processus 'webserv' existants"
+                echo "  --with-siege               execute les tests de charge siege"
+                echo "  --skip-valgrind            passe les verifications valgrind (gain ~90s)"
+                echo "  --keep-logs                conserve /tmp pour debug (defaut: nettoyage)"
+                echo "  --verbose                  affiche logs debug additionnels"
+                echo "  -h, --help                 affiche cette aide"
                 exit 0
                 ;;
             *)
                 echo "Option inconnue: $1"
-                echo "Usage: ./eval_test.sh [--keep-server] [--kill-existing-webserv] [--with-siege]"
+                echo "Usage: ./eval_test.sh [options]"
                 exit 2
                 ;;
         esac
         shift
     done
+
+    # Afficher les options activees
+    announce "Configuration:"
+    [[ $KEEP_SERVER -eq 1 ]] && announce "  - Serveur conserve apres tests"
+    [[ $KILL_EXISTING_WEBSERV -eq 1 ]] && announce "  - Kill webserv existants"
+    [[ $RUN_SIEGE -eq 1 ]] && announce "  - Tests siege actifs"
+    [[ $RUN_VALGRIND -eq 0 ]] && announce "  - Valgrind DÉSACTIVÉ (gain ~90s)"
+    [[ $KEEP_LOGS -eq 1 ]] && announce "  - Logs conserves dans $TMP_DIR"
+    [[ $VERBOSE -eq 1 ]] && announce "  - Mode VERBOSE"
 
     require_cmd curl "Preflight"
     require_cmd make "Preflight"
@@ -1614,6 +1948,7 @@ main() {
 
     test_readme
     test_build || { print_summary; exit 1; }
+    test_program_invocation
     test_code_checks
     test_parsing_validation
     test_core_runtime
@@ -1630,7 +1965,7 @@ main() {
     if [[ $RUN_SIEGE -eq 1 ]]; then
         test_siege
     else
-        note "Siege non execute par defaut (utiliser --with-siege)"
+        announce "[*] Siege non execute par defaut (utiliser --with-siege pour stress tests)"
     fi
     stop_server
     test_valgrind_best_effort

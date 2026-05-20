@@ -76,7 +76,6 @@ void Core::runPoll()
 		if (quit == true)
 			break;
 		time_t now = time(NULL);
-		std::vector<int> toClose;
 		for (std::map<int, Server*>::iterator it = _fdClientToServer.begin(); it != _fdClientToServer.end(); ++it)
 		{
 			int clientFd = it->first;
@@ -121,9 +120,6 @@ void Core::runPoll()
 				srv->finalizeCgi(clientFd);
 			}
 		}
-
-		for (size_t i = 0; i < toClose.size(); i++)
-			closeClient(toClose[i]);
 
 		int ret = poll(_pollFds.data(), _pollFds.size(), 1);
 
@@ -193,7 +189,7 @@ void Core::runPoll()
 					_pollFds[i].events |= POLLOUT;
 			}
 
-			if (_fdClientToServer.count(fd) && _fdClientToServer[fd]->clientToClose(fd))
+			if (_fdClientToServer.count(fd) && _fdClientToServer[fd]->clientToClose(fd)  && _fdClientToServer[fd]->getClients()[fd].closeAfterSend == false)
 			{
 				closeClient(fd);
 				i--;

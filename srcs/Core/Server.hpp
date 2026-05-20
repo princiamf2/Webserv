@@ -35,13 +35,15 @@
 // client
 struct Client {
 	int         fd;
-	bool        toClose;       // does this client need to be closed
-	std::string readBuf;       // data we recieve
-	std::string writeBuf;      // data we need to send
-	time_t      lastActivity;  // last time the client were active, for incomplete requests...
-	bool        waitingBody;   // are we waiting for the rest of the body ?
-	bool		cgiActive;     // is a cgi active ?
-	CgiProcess	cgi;           // cgi struct
+	bool        toClose;            // does this client need to be closed
+	std::string readBuf;            // data we recieve
+	std::string writeBuf;           // data we need to send
+	time_t      lastActivity;       // last time the client were active, for incomplete requests...
+	bool        waitingBody;        // are we waiting for the rest of the body ?
+	bool        payloadErr;         // err 413 ?
+	bool        closeAfterSend;      // closing after a loop of poll for firefox connection reset error
+	bool		cgiActive;          // is a cgi active ?
+	CgiProcess	cgi;                // cgi struct
 };
 
 //====================(DECLARATIONS)========================//
