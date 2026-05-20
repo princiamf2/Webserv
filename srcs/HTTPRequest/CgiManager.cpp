@@ -395,7 +395,7 @@ bool CgiManager::startProcess(CgiProcess& process,
 		std::string cgiScriptFilename = scriptPath;
 		if (!interpreter.empty())
 			cgiScriptFilename = "./" + executableName;
-		
+
 		envp = buildCgiEnv(request, server, location, cgiScriptFilename, scriptName, pathInfo);
 
 		if (!interpreter.empty())
@@ -410,7 +410,7 @@ bool CgiManager::startProcess(CgiProcess& process,
 			argv[1] = NULL;
 			argv[2] = NULL;
 		}
-		
+
 		execve(argv[0], argv, envp);
 		freeCgiEnv(envp);
 		std::exit(1);
@@ -450,9 +450,15 @@ bool CgiManager::writeInput(CgiProcess& process)
 		return true;
 	}
 
+	size_t remaining = process.inputBuffer.size() - process.inputOffset;
+	size_t chunkSize = remaining;
+
+	if (chunkSize > 4096)
+		chunkSize = 4096;
+
 	ssize_t written = write(process.stdinFd,
 		process.inputBuffer.c_str() + process.inputOffset,
-		process.inputBuffer.size() - process.inputOffset);
+		chunkSize);
 
 	//write peut retourner 0 (aucun byte) ou -1 (erreur), les deux ferment stdin
 	if (written <= 0)
@@ -516,7 +522,7 @@ CgiResult CgiManager::buildFinalResult(CgiProcess& process)
 	CgiResult result;
 
 	result.rawOutput = process.outputBuffer;
-	
+
 	if (process.error)
 		return result;
 

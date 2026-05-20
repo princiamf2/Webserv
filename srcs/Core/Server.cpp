@@ -174,9 +174,11 @@ static bool isChunkedRequest(std::string const& headersLower)
 		&& headersLower.find("chunked") != std::string::npos);
 }
 
-static ChunkedState getChunkedState(std::string const& buffer, size_t bodyStart)
+static ChunkedState getChunkedState(std::string const& buffer,
+	size_t bodyStart, size_t* decodedSize)
 {
 	size_t pos = bodyStart;
+	size_t total = 0;
 
 	while (true)
 	{
@@ -199,19 +201,24 @@ static ChunkedState getChunkedState(std::string const& buffer, size_t bodyStart)
 
 		if (chunkSize == 0)
 		{
+			if (decodedSize)
+				*decodedSize = total;
+			if (buffer.size() >= pos + 2 && buffer.substr(pos, 2) == "\r\n")
+				return CHUNKED_COMPLETE;
 			size_t trailerEnd = buffer.find("\r\n\r\n", pos);
 			if (trailerEnd != std::string::npos)
 				return CHUNKED_COMPLETE;
-
-			if (buffer.size() >= pos + 2 && buffer.substr(pos, 2) == "\r\n")
-				return CHUNKED_COMPLETE;
-
 			return CHUNKED_INCOMPLETE;
 		}
 
 		if (buffer.size() < pos + chunkSize + 2)
+		{
+			if (decodedSize)
+				*decodedSize = total + chunkSize;
 			return CHUNKED_INCOMPLETE;
+		}
 
+		total += chunkSize;
 		pos += chunkSize;
 
 		if (buffer.substr(pos, 2) != "\r\n")
@@ -228,6 +235,7 @@ void Server::readClient(int fd, Core *core)
 
 	if (bytes < 0)
 	{
+		_clients[fd].toClose = true;
 		logs("recv error fd=" + toString(fd));
 		_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 			buildErrorResponse(_conf, 500, "recv failed"));
@@ -264,10 +272,36 @@ void Server::readClient(int fd, Core *core)
 	std::string headersLower = toLowerString(headersPart);
 	size_t clPos = headersLower.find("content-length:");
 
-	if (isChunkedRequest(headersLower))
+	bool isChunked = isChunkedRequest(headersLower);
+	unsigned int clientMaxBodySize = _clientMaxBodySize;
+
+	try
+	{
+		HttpRequest headerRequest = HttpParser::parseRequest(headersPart + "\r\n\r\n");
+		Location const* headerLocation = findBestLocation(_conf, headerRequest.path);
+		if (headerLocation && headerLocation->client_max_body_size_set)
+			clientMaxBodySize = headerLocation->client_max_body_size;
+	}
+	catch (std::exception const& e)
+	{
+		(void)e;
+	}
+
+	if (isChunked)
 	{
 		size_t bodyStart = headerEnd + 4;
-		ChunkedState state = getChunkedState(_clients[fd].readBuf, bodyStart);
+		size_t decodedSize = 0;
+		ChunkedState state = getChunkedState(_clients[fd].readBuf, bodyStart, &decodedSize);
+
+		if (clientMaxBodySize > 0 && decodedSize > clientMaxBodySize)
+		{
+			logs("payload too large fd=" + toString(fd) + " chunked-size=" + toString((int)decodedSize));
+			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
+				buildErrorResponse(_conf, 413, "payload too large"));
+			_clients[fd].waitingBody = false;
+			_clients[fd].readBuf.clear();
+			return ;
+		}
 
 		if (state == CHUNKED_INCOMPLETE)
 		{
@@ -287,12 +321,13 @@ void Server::readClient(int fd, Core *core)
 		_clients[fd].waitingBody = false;
 	}
 
-	if (clPos != std::string::npos && clPos < headerEnd)
+	if (!isChunked && clPos != std::string::npos && clPos < headerEnd)
 	{
 		size_t clEnd = headersPart.find("\r\n", clPos);
 		std::string tmp = headersPart.substr(clPos + 15, clEnd - clPos - 15);
 		contentLength = std::atoll(tmp.c_str());
-		if (_clientMaxBodySize > 0 && contentLength > _clientMaxBodySize)
+
+		if (clientMaxBodySize > 0 && contentLength > clientMaxBodySize)
 		{
 			logs("payload too large fd=" + toString(fd) + " content-length=" + toString((int)contentLength));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
@@ -301,8 +336,9 @@ void Server::readClient(int fd, Core *core)
 			_clients[fd].readBuf.clear();
 			return ;
 		}
+
 		size_t bodySize = _clients[fd].readBuf.size() - (headerEnd + 4);
-		if (_clientMaxBodySize > 0 && bodySize > _clientMaxBodySize)
+		if (clientMaxBodySize > 0 && bodySize > clientMaxBodySize)
 		{
 			logs("payload too large fd=" + toString(fd) + " body-size=" + toString((int)bodySize));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
@@ -311,14 +347,14 @@ void Server::readClient(int fd, Core *core)
 			_clients[fd].readBuf.clear();
 			return ;
 		}
+
 		if (bodySize < contentLength)
 		{
 			logs("waiting body fd=" + toString(fd) + " received=" + toString((int)bodySize) + " expected=" + toString((int)contentLength));
 			_clients[fd].waitingBody = true;
-			return ; // incomplete body
+			return ;
 		}
 	}
-	_clients[fd].waitingBody = false;
 	try
 	{
 		HttpRequest request = HttpParser::parseRequest(_clients[fd].readBuf);
@@ -377,7 +413,7 @@ void Server::writeClient(int fd)
 		_clients[fd].toClose = true;
 		return ;
 	}
-	_clients[fd].writeBuf.erase(0, bytes); 
+	_clients[fd].writeBuf.erase(0, bytes);
 	if (_clients[fd].writeBuf.empty())
 	{
 		logs("response sent fd=" + toString(fd));
