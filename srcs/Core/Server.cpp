@@ -13,7 +13,7 @@ enum ChunkedState
 
 Server::Server(ServerConfig serv)
 {
-	_conf = serv;                                    // parsing configuration keeped
+	_conf = serv;                                    // parsing configuration 
 	_host = "127.0.0.1";                             // host
 	_ports = serv.listen_ports;                      // listen ports
 	_listenEntries = serv.listen_entries;            // listen interfaces + ports
@@ -22,7 +22,7 @@ Server::Server(ServerConfig serv)
 	_index = serv.index;                             // index file by default
 	_errorPages = serv.error_pages;                  // error code -> path (404 page for example)
 	_clientMaxBodySize = serv.client_max_body_size;  // max size of request body
-	_locations = serv.locations;                     // locations list for this serveur
+	_locations = serv.locations;                     // locations list for this server
 	// _listenFds;                                   // one fd by port after socket()+bind()+listen(), filled by init
 	// _clients;                                     // clients fds -> client they correspond, filled as we go along by Core::acceptClient
 	_autoindex = false;                              // autoindex ?
@@ -263,7 +263,7 @@ void Server::readClient(int fd, Core *core)
 
 	size_t headerEnd = _clients[fd].readBuf.find("\r\n\r\n");
 	if (headerEnd == std::string::npos)
-		return ; // wiating for headers to end
+		return ; // waiting for headers to end
 
 	size_t contentLength = 0;
 	std::string headersPart = _clients[fd].readBuf.substr(0, headerEnd);
@@ -392,8 +392,7 @@ void Server::writeClient(int fd)
 	if (_clients[fd].writeBuf.empty())
 		return ;
 
-	ssize_t bytes = send(fd, _clients[fd].writeBuf.c_str(),
-							 _clients[fd].writeBuf.size(), 0);
+	ssize_t bytes = send(fd, _clients[fd].writeBuf.c_str(), _clients[fd].writeBuf.size(), 0);
 	if (bytes == 0)
 	{
 		logs("send closed fd=" + toString(fd));
@@ -485,13 +484,13 @@ void Server::debug()
 	for (std::vector<Location>::iterator it = _locations.begin(); it != _locations.end(); ++it)
 	{
 		n++;
-	    std::cout << "	" << n << std::endl;
-	    std::cout << "		path: -> " << it->path << std::endl;
+		std::cout << "	" << n << std::endl;
+		std::cout << "		path: -> " << it->path << std::endl;
 
-	    // show authoriwed methods
-	    std::cout << "		methods: " << std::endl;
-	    for (std::set<std::string>::iterator it2 = it->allowed_methods_http.begin();
-	         it2 != it->allowed_methods_http.end(); ++it2)
+	    // show authorized methods
+		std::cout << "		methods: " << std::endl;
+		for (std::set<std::string>::iterator it2 = it->allowed_methods_http.begin();
+			it2 != it->allowed_methods_http.end(); ++it2)
 	    std::cout << "			- " << *it2 << std::endl;
 
 		std::cout << "\t\tcgi_extensions: ";
