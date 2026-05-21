@@ -189,7 +189,7 @@ void Core::runPoll()
 					_pollFds[i].events |= POLLOUT;
 			}
 
-			if (_fdClientToServer.count(fd) && _fdClientToServer[fd]->clientToClose(fd)  && _fdClientToServer[fd]->getClients()[fd].closeAfterSend == false)
+			if (_fdClientToServer.count(fd) && _fdClientToServer[fd]->clientToClose(fd))  
 			{
 				closeClient(fd);
 				i--;
