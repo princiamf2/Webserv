@@ -149,10 +149,7 @@ char** CgiManager::buildCgiEnv(const HttpRequest& request,
 	envStrings.push_back("QUERY_STRING=" + request.query);
 	envStrings.push_back("SCRIPT_NAME=" + scriptName);
 	envStrings.push_back("SCRIPT_FILENAME=" + scriptPath);
-	if (pathInfo.empty())
-		envStrings.push_back("PATH_INFO=" + scriptName);
-	else
-		envStrings.push_back("PATH_INFO=" + pathInfo);
+	envStrings.push_back("PATH_INFO=" + pathInfo);
 	envStrings.push_back("REQUEST_URI=" + request.uri);
 	envStrings.push_back("CONTENT_LENGTH=" + contentLength);
 	envStrings.push_back("DOCUMENT_ROOT=" + server.root);

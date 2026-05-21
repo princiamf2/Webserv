@@ -13,7 +13,7 @@ enum ChunkedState
 
 Server::Server(ServerConfig serv)
 {
-	_conf = serv;                                    // parsing configuration 
+	_conf = serv;                                    // parsing configuration
 	_host = "127.0.0.1";                             // host
 	_ports = serv.listen_ports;                      // listen ports
 	_listenEntries = serv.listen_entries;            // listen interfaces + ports
@@ -415,14 +415,14 @@ void Server::writeClient(int fd)
 	}
 	_clients[fd].writeBuf.erase(0, bytes);
 	if (_clients[fd].writeBuf.empty())
-	{
-		logs("response sent fd=" + toString(fd));
-		if (_clients[fd].closeAfterSend)
-		{
-			_clients[fd].toClose = true;
-			_clients[fd].waitingBody = true;
-		}
-	}
+    {
+        logs("response sent fd=" + toString(fd));
+        if (_clients[fd].closeAfterSend || !_clients[fd].cgiActive)
+        {
+            _clients[fd].toClose = true;
+            _clients[fd].waitingBody = true;
+        }
+    }
 	_clients[fd].lastActivity = time(NULL);
 }
 

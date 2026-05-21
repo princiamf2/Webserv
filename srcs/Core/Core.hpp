@@ -26,7 +26,7 @@
 # define FAIL 0
 # define TIMEOUT 60
 # define BODYTO 10
-# define CGI_TIMEOUT 60
+# define CGI_TIMEOUT 5
 
 //====================(STRUCTS)=============================//
 
@@ -60,7 +60,7 @@ class Core
 		void closeClient(int fd);                                    // close and remove client
 		void enableClientWrite(int fd);                              // write to client when response is ready
 		void removePollFd(int fd);
-		
+
 		void debug();                                                // show core and servers infos
 		std::vector<Server>& getServers();                           // getter for servers vector
 };

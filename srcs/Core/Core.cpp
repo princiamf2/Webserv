@@ -189,7 +189,7 @@ void Core::runPoll()
 					_pollFds[i].events |= POLLOUT;
 			}
 
-			if (_fdClientToServer.count(fd) && _fdClientToServer[fd]->clientToClose(fd))  
+			if (_fdClientToServer.count(fd) && _fdClientToServer[fd]->clientToClose(fd) && _fdClientToServer[fd]->getClients()[fd].closeAfterSend == false)
 			{
 				closeClient(fd);
 				i--;
@@ -291,7 +291,7 @@ void Core::acceptClient(int listenFd)
 	_fdToServer[listenFd]->addClient(clientFd); // add client in server
 }
 
-void Core::removePollFd(int fd) 
+void Core::removePollFd(int fd)
 {
 	for (size_t i = 0; i < _pollFds.size(); ++i)
 	{
