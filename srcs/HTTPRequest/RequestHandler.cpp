@@ -34,6 +34,7 @@ RequestHandler& RequestHandler::operator=(RequestHandler const& other) {(void)ot
 RequestHandler::~RequestHandler() {}
 
 //petit check de la taile du body
+
 static unsigned int resolveClientMaxBodySize(ServerConfig const& server,
 	Location const* location)
 {
@@ -51,6 +52,7 @@ static bool isBodySizeValid(HttpRequest const& request,
 		return true;
 	return (request.body.size() <= limit);
 }
+
 //petit outil qui check les methods si la method on la supporte
 static bool isSupportedMethod(std::string const& method)
 {
@@ -64,13 +66,6 @@ static bool isMethodAllowed(std::string const& method, Location const* location)
 		return true;
 	if (location->allowed_methods_http.empty())
 		return true;
-	if (method == "HEAD")
-	{
-		return (location->allowed_methods_http.find("HEAD")
-				!= location->allowed_methods_http.end()
-			|| location->allowed_methods_http.find("GET")
-				!= location->allowed_methods_http.end());
-	}
 	return (location->allowed_methods_http.find(method)
 		!= location->allowed_methods_http.end());
 }
@@ -348,7 +343,7 @@ static std::string buildAllowHeader(Location const* location)
 	{
 		if (!first)
 			allow += ", ";
-		allow += "GET, HEAD";
+		allow += "GET";
 		first = false;
 	}
 	if (location->allowed_methods_http.find("POST")

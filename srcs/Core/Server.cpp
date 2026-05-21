@@ -13,7 +13,7 @@ enum ChunkedState
 
 Server::Server(ServerConfig serv)
 {
-	_conf = serv;                                    // parsing configuration keeped
+	_conf = serv;                                    // parsing configuration 
 	_host = "127.0.0.1";                             // host
 	_ports = serv.listen_ports;                      // listen ports
 	_listenEntries = serv.listen_entries;            // listen interfaces + ports
@@ -22,7 +22,7 @@ Server::Server(ServerConfig serv)
 	_index = serv.index;                             // index file by default
 	_errorPages = serv.error_pages;                  // error code -> path (404 page for example)
 	_clientMaxBodySize = serv.client_max_body_size;  // max size of request body
-	_locations = serv.locations;                     // locations list for this serveur
+	_locations = serv.locations;                     // locations list for this server
 	// _listenFds;                                   // one fd by port after socket()+bind()+listen(), filled by init
 	// _clients;                                     // clients fds -> client they correspond, filled as we go along by Core::acceptClient
 	_autoindex = false;                              // autoindex ?
@@ -171,12 +171,10 @@ static std::string toLowerString(std::string s)
 
 static bool isChunkedRequest(std::string const& headersLower)
 {
-	return (headersLower.find("transfer-encoding:") != std::string::npos
-		&& headersLower.find("chunked") != std::string::npos);
+	return (headersLower.find("transfer-encoding:") != std::string::npos && headersLower.find("chunked") != std::string::npos);
 }
 
-static ChunkedState getChunkedState(std::string const& buffer,
-	size_t bodyStart, size_t* decodedSize)
+static ChunkedState getChunkedState(std::string const& buffer, size_t bodyStart, size_t* decodedSize)
 {
 	size_t pos = bodyStart;
 	size_t total = 0;
@@ -242,6 +240,7 @@ void Server::readClient(int fd, Core *core)
 			buildErrorResponse(_conf, 500, "recv failed"));
 		_clients[fd].waitingBody = false;
 		_clients[fd].readBuf.clear();
+		_clients[fd].toClose = true;
 		return ;
 	}
 
@@ -266,14 +265,14 @@ void Server::readClient(int fd, Core *core)
 
 	size_t headerEnd = _clients[fd].readBuf.find("\r\n\r\n");
 	if (headerEnd == std::string::npos)
-		return ; // wiating for headers to end
+		return ; // waiting for headers to end
 
 	size_t contentLength = 0;
 	std::string headersPart = _clients[fd].readBuf.substr(0, headerEnd);
 	std::string headersLower = toLowerString(headersPart);
 	size_t clPos = headersLower.find("content-length:");
-
 	bool isChunked = isChunkedRequest(headersLower);
+
 	unsigned int clientMaxBodySize = _clientMaxBodySize;
 
 	try
@@ -299,7 +298,6 @@ void Server::readClient(int fd, Core *core)
 			logs("payload too large fd=" + toString(fd) + " chunked-size=" + toString((int)decodedSize));
 			_clients[fd].writeBuf = HttpResponseBuilder::buildResponse(
 				buildErrorResponse(_conf, 413, "payload too large"));
-			_clients[fd].closeAfterSend = true;
 			_clients[fd].waitingBody = false;
 			_clients[fd].readBuf.clear();
 			return ;
@@ -328,7 +326,6 @@ void Server::readClient(int fd, Core *core)
 		size_t clEnd = headersPart.find("\r\n", clPos);
 		std::string tmp = headersPart.substr(clPos + 15, clEnd - clPos - 15);
 		contentLength = std::atoll(tmp.c_str());
-
 		if (clientMaxBodySize > 0 && contentLength > clientMaxBodySize)
 		{
 			logs("payload too large fd=" + toString(fd) + " content-length=" + toString((int)contentLength));
@@ -400,8 +397,7 @@ void Server::writeClient(int fd)
 	if (_clients[fd].writeBuf.empty())
 		return ;
 
-	ssize_t bytes = send(fd, _clients[fd].writeBuf.c_str(),
-							 _clients[fd].writeBuf.size(), 0);
+	ssize_t bytes = send(fd, _clients[fd].writeBuf.c_str(), _clients[fd].writeBuf.size(), 0);
 	if (bytes == 0)
 	{
 		logs("send closed fd=" + toString(fd));
@@ -497,13 +493,13 @@ void Server::debug()
 	for (std::vector<Location>::iterator it = _locations.begin(); it != _locations.end(); ++it)
 	{
 		n++;
-	    std::cout << "	" << n << std::endl;
-	    std::cout << "		path: -> " << it->path << std::endl;
+		std::cout << "	" << n << std::endl;
+		std::cout << "		path: -> " << it->path << std::endl;
 
-	    // show authoriwed methods
-	    std::cout << "		methods: " << std::endl;
-	    for (std::set<std::string>::iterator it2 = it->allowed_methods_http.begin();
-	         it2 != it->allowed_methods_http.end(); ++it2)
+	    // show authorized methods
+		std::cout << "		methods: " << std::endl;
+		for (std::set<std::string>::iterator it2 = it->allowed_methods_http.begin();
+			it2 != it->allowed_methods_http.end(); ++it2)
 	    std::cout << "			- " << *it2 << std::endl;
 
 		std::cout << "\t\tcgi_extensions: ";

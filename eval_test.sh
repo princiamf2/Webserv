@@ -1285,10 +1285,10 @@ test_core_runtime() {
     # HEAD suit la config: Core.config autorise seulement GET sur /
     local head_status head_cl
     head_status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 -X HEAD 'http://127.0.0.1:8080/' 2>/dev/null || true)"
-    if [[ "$head_status" == "200" ]]; then
-        pass "HEAD / -> 200"
+    if [[ "$head_status" == "405" ]]; then
+        pass "HEAD / -> 405 quand seule GET est autorisee"
     else
-        fail "HEAD / -> attendu=200 recu=$head_status"
+        fail "HEAD / -> attendu=405 recu=$head_status"
     fi
     head_cl="$(curl -sI --max-time 8 'http://127.0.0.1:8080/' 2>/dev/null | grep -i '^content-length:' | tr -d '\r' | awk '{print $2}' || true)"
     if [[ -n "$head_cl" ]]; then

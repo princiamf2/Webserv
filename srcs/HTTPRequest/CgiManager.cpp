@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   CgiManager.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: michel <michel@student.42.fr>              +#+  +:+       +#+        */
+/*   By: Nicolsan <nicolas.sanchezroca123@gmail.    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/09 14:52:49 by malapoug          #+#    #+#             */
-/*   Updated: 2026/05/13 18:33:58 by michel           ###   ########.fr       */
+/*   Updated: 2026/05/21 10:23:49 by Nicolsan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -149,7 +149,10 @@ char** CgiManager::buildCgiEnv(const HttpRequest& request,
 	envStrings.push_back("QUERY_STRING=" + request.query);
 	envStrings.push_back("SCRIPT_NAME=" + scriptName);
 	envStrings.push_back("SCRIPT_FILENAME=" + scriptPath);
-	envStrings.push_back("PATH_INFO=" + pathInfo);
+	if (pathInfo.empty())
+		envStrings.push_back("PATH_INFO=" + scriptName);
+	else
+		envStrings.push_back("PATH_INFO=" + pathInfo);
 	envStrings.push_back("REQUEST_URI=" + request.uri);
 	envStrings.push_back("CONTENT_LENGTH=" + contentLength);
 	envStrings.push_back("DOCUMENT_ROOT=" + server.root);
@@ -455,7 +458,6 @@ bool CgiManager::writeInput(CgiProcess& process)
 
 	if (chunkSize > 4096)
 		chunkSize = 4096;
-
 	ssize_t written = write(process.stdinFd,
 		process.inputBuffer.c_str() + process.inputOffset,
 		chunkSize);
@@ -528,6 +530,11 @@ CgiResult CgiManager::buildFinalResult(CgiProcess& process)
 
 	if (result.rawOutput.empty())
 		return result;
+	// verifie fin propre du CGI
+	if (!WIFEXITED(process.exitStatus))
+    	return result;
+	if (WEXITSTATUS(process.exitStatus) != 0)
+    	return result;
 
 	result.response = buildResponseFromCgiOutput(result.rawOutput);
 	result.success = true;
